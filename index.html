@@ -1,0 +1,1361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stormworks Lua Playground</title>
+
+<!-- CodeMirror (editor with Lua syntax highlighting). Loaded from CDN; -->
+<!-- if you are offline the editor falls back to a plain text box. -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/lua/lua.min.js"></script>
+
+<!-- Fengari: a real Lua 5.3 virtual machine in JavaScript (Stormworks uses Lua 5.3.5). -->
+<script src="https://cdn.jsdelivr.net/npm/fengari-web@0.1.4/dist/fengari-web.js"></script>
+
+<!-- Lucide: clean line icons (Photoshop-style tool glyphs). Pinned for stability. -->
+<script src="https://cdn.jsdelivr.net/npm/lucide@1.16.0/dist/umd/lucide.min.js"></script>
+
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c2230; --border:#2a3140;
+    --text:#d7dde7; --dim:#8a93a3; --accent:#39d98a; --accent2:#3aa0ff;
+    --warn:#ff5c5c; --yellow:#ffcf52;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:"Segoe UI",system-ui,sans-serif; font-size:14px;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  header{
+    display:flex; align-items:center; gap:14px; padding:8px 14px;
+    background:var(--panel); border-bottom:1px solid var(--border); flex-wrap:wrap;
+  }
+  header h1{font-size:15px; margin:0; font-weight:600; letter-spacing:.3px}
+  header h1 span{color:var(--accent)}
+  .ctrl{display:flex; align-items:center; gap:6px}
+  label.lbl{color:var(--dim); font-size:12px}
+  select,button,input{font-family:inherit}
+  select{
+    background:var(--panel2); color:var(--text); border:1px solid var(--border);
+    border-radius:6px; padding:5px 8px; font-size:13px;
+  }
+  button{
+    background:var(--panel2); color:var(--text); border:1px solid var(--border);
+    border-radius:6px; padding:6px 12px; cursor:pointer; font-size:13px;
+  }
+  button:hover{border-color:var(--accent2)}
+  button.primary{background:var(--accent); color:#06231a; border-color:var(--accent); font-weight:600}
+  button.primary:hover{filter:brightness(1.08)}
+  button.stop{background:var(--warn); color:#2a0a0a; border-color:var(--warn); font-weight:600}
+  .spacer{flex:1}
+  .tickinfo{color:var(--dim); font-size:12px; font-variant-numeric:tabular-nums}
+
+  main{flex:1; display:flex; min-height:0}
+  .left{display:flex; flex-direction:column; width:50%; min-width:300px; border-right:1px solid var(--border)}
+  .right{display:flex; flex-direction:column; flex:1; min-width:340px}
+
+  .editor-wrap{flex:1; min-height:0; display:flex; flex-direction:column}
+  .CodeMirror{height:100%; font-size:13px; line-height:1.45}
+  #editor{
+    flex:1; width:100%; resize:none; border:0; outline:0; padding:10px;
+    background:#10141b; color:var(--text); font-family:"Consolas",monospace; font-size:13px;
+    tab-size:4; line-height:1.45;
+  }
+  .editor-bar{
+    display:flex; align-items:center; gap:8px; padding:6px 10px;
+    background:var(--panel); border-bottom:1px solid var(--border); flex-wrap:wrap;
+  }
+  .console{
+    height:130px; overflow:auto; background:#0a0d12; border-top:1px solid var(--border);
+    padding:6px 10px; font-family:"Consolas",monospace; font-size:12px; white-space:pre-wrap;
+  }
+  .console .err{color:var(--warn)}
+  .console .info{color:var(--dim)}
+  .console .print{color:var(--accent)}
+
+  .screen-wrap{display:flex; flex-direction:column; flex:0 0 auto; border-bottom:1px solid var(--border)}
+  .screen-toolbar{
+    display:flex; align-items:center; gap:10px; padding:6px 12px; flex-wrap:wrap;
+    background:var(--panel); border-bottom:1px solid var(--border); font-size:12px;
+  }
+  .screen-toolbar label{display:flex; align-items:center; gap:5px; color:var(--dim); cursor:pointer}
+  .screen-toolbar .sep{width:1px; align-self:stretch; background:var(--border); margin:0 2px}
+  .screen-toolbar button{padding:4px 9px; font-size:12px}
+  .screen-toolbar input[type=color]{width:26px; height:22px; padding:0; border:1px solid var(--border); border-radius:4px; background:none; cursor:pointer}
+  .screen-toolbar button.toggled{background:var(--accent2); color:#04141f; border-color:var(--accent2); font-weight:600}
+  .screen-toolbar [data-tool]{width:30px; display:inline-flex; align-items:center; justify-content:center; padding:5px 0}
+  .screen-toolbar svg, .editor-bar svg{width:15px; height:15px; stroke-width:2}
+  #copyBtn{display:inline-flex; align-items:center; gap:5px}
+  #fillToggle{display:inline-flex; align-items:center; padding:5px 7px}
+  .screen-toolbar select{padding:4px 6px; font-size:12px}
+  .screen-area{
+    display:flex; align-items:center; justify-content:center;
+    background:#05070a; padding:14px; min-height:340px;
+  }
+  #screen{
+    image-rendering:pixelated; image-rendering:crisp-edges;
+    background:#000; box-shadow:0 0 0 2px #000, 0 0 22px rgba(0,0,0,.6);
+  }
+  #screen.drawing{cursor:crosshair}
+  .textpop{position:fixed; z-index:9999; background:var(--panel2); border:1px solid var(--accent2); border-radius:6px; padding:4px; box-shadow:0 6px 18px rgba(0,0,0,.55)}
+  .textpop input{background:#10141b; color:var(--text); border:1px solid var(--border); border-radius:4px; padding:5px 7px; font-size:13px; width:130px; outline:none}
+  .panel-tabs{display:flex; gap:2px; background:var(--panel); border-bottom:1px solid var(--border); padding:6px 8px 0}
+  .panel-tabs button{
+    border-radius:6px 6px 0 0; border-bottom:0; padding:6px 12px; font-size:12px;
+    background:transparent; color:var(--dim); border-color:transparent;
+  }
+  .panel-tabs button.active{background:var(--panel2); color:var(--text); border-color:var(--border)}
+  .panel-body{flex:1; overflow:auto; background:var(--panel2)}
+  .tabpane{display:none; padding:12px 14px}
+  .tabpane.active{display:block}
+
+  .io-grid{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+  .io-col h3{margin:0 0 8px; font-size:12px; color:var(--accent2); text-transform:uppercase; letter-spacing:.5px}
+  .chan{display:grid; grid-template-columns:22px 42px 1fr 42px 46px 16px; align-items:center; gap:5px; margin-bottom:7px}
+  .chan .cl{color:var(--dim); font-size:12px; font-variant-numeric:tabular-nums}
+  .chan input[type=range]{width:100%}
+  .chan input[type=number]{width:100%; background:#10141b; color:var(--text); border:1px solid var(--border); border-radius:4px; padding:3px 3px; font-size:11px}
+  .chan input.minbox,.chan input.maxbox{color:var(--dim)}
+  .bchan{display:flex; align-items:center; gap:8px; margin-bottom:6px}
+  .bchan .cl{width:26px; color:var(--dim); font-size:12px}
+  .rm{background:none; border:0; color:var(--dim); cursor:pointer; font-size:14px; padding:0 2px; line-height:1}
+  .rm:hover{color:var(--warn)}
+  .addbtn{background:var(--panel); border:1px solid var(--border); color:var(--accent); border-radius:6px; padding:3px 9px; font-size:11px; cursor:pointer; margin-left:6px}
+  .addbtn:hover{border-color:var(--accent)}
+  .io-col h3{display:flex; align-items:center}
+  .out-row{display:flex; justify-content:space-between; padding:3px 6px; border-bottom:1px solid var(--border); font-family:Consolas,monospace; font-size:12px}
+  .out-row span:first-child{color:var(--dim)}
+  .rangecfg{display:flex; align-items:center; gap:6px; margin-bottom:10px; color:var(--dim); font-size:12px}
+  .rangecfg input{width:54px; background:#10141b; color:var(--text); border:1px solid var(--border); border-radius:4px; padding:3px; font-size:12px}
+
+  .docs h3{color:var(--accent2); font-size:13px; margin:14px 0 6px}
+  .docs h3:first-child{margin-top:0}
+  .docs code{background:#10141b; padding:1px 5px; border-radius:4px; color:var(--yellow); font-family:Consolas,monospace; font-size:12px}
+  .docs .fn{margin:5px 0; padding-left:10px; border-left:2px solid var(--border)}
+  .docs .fn b{color:var(--text)}
+  .docs p{color:var(--dim); margin:4px 0; line-height:1.5}
+  .docs ul{margin:6px 0; padding-left:18px; color:var(--dim); line-height:1.6}
+  .docs li b{color:var(--text)}
+  .hint{color:var(--dim); font-size:12px; margin-left:4px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Stormworks <span>Lua</span> Playground</h1>
+  <div class="ctrl">
+    <label class="lbl">Zoom</label>
+    <select id="zoomSel">
+      <option value="0" selected>Fit</option>
+      <option value="2">2×</option>
+      <option value="4">4×</option>
+      <option value="6">6×</option>
+      <option value="8">8×</option>
+      <option value="10">10×</option>
+      <option value="12">12×</option>
+      <option value="16">16×</option>
+    </select>
+  </div>
+  <div class="spacer"></div>
+  <span class="tickinfo" id="tickInfo">tick 0 · 0 fps</span>
+  <button id="stepBtn">⤳ Step</button>
+  <button id="resetBtn" class="primary">⟲ Reset</button>
+</header>
+
+<main>
+  <div class="left">
+    <div class="editor-bar">
+      <label class="lbl">Examples</label>
+      <select id="exampleSel"></select>
+      <button id="copyBtn" title="Copy all code to clipboard"><i data-lucide="copy"></i> Copy</button>
+    </div>
+    <div class="editor-wrap">
+      <textarea id="editor" spellcheck="false"></textarea>
+    </div>
+    <div class="console" id="console"></div>
+  </div>
+
+  <div class="right">
+    <div class="screen-wrap">
+      <div class="screen-toolbar" id="screenToolbar">
+        <select id="sizeSel" title="Monitor size">
+          <option value="32x32">1x1 — 32×32</option>
+          <option value="64x32">2x1 — 64×32</option>
+          <option value="64x64" selected>2x2 — 64×64</option>
+          <option value="96x64">3x2 — 96×64</option>
+          <option value="96x96">3x3 — 96×96</option>
+          <option value="160x96">5x3 — 160×96</option>
+          <option value="288x160">9x5 — 288×160</option>
+        </select>
+        <span class="sep"></span>
+        <button data-tool="move" title="Move (V)"><i data-lucide="move"></i></button>
+        <button data-tool="line" title="Line (L)"><i data-lucide="pen-line"></i></button>
+        <button data-tool="rect" title="Rectangle (R)"><i data-lucide="square"></i></button>
+        <button data-tool="circle" title="Circle (C)"><i data-lucide="circle"></i></button>
+        <button data-tool="triangle" title="Triangle (Y)"><i data-lucide="triangle"></i></button>
+        <button data-tool="text" title="Text (T)"><i data-lucide="type"></i></button>
+        <button data-tool="eraser" title="Eraser — click a shape to delete (E)"><i data-lucide="eraser"></i></button>
+        <button data-tool="eyedropper" title="Pick colour (I)"><i data-lucide="pipette"></i></button>
+        <button id="fillToggle" title="Fill shapes (F)"><i data-lucide="paint-bucket"></i></button>
+        <input type="color" id="toolColor" value="#39d98a" title="Colour">
+        <span class="sep"></span>
+        <button id="undoBtn" title="Undo (Ctrl+Z)"><i data-lucide="undo-2"></i></button>
+        <button id="redoBtn" title="Redo (Ctrl+Shift+Z)"><i data-lucide="redo-2"></i></button>
+        <span class="sep"></span>
+        <label><input type="checkbox" id="gridChk" checked> Grid</label>
+      </div>
+      <div class="screen-area">
+        <canvas id="screen" width="64" height="64"></canvas>
+      </div>
+    </div>
+    <div class="panel-tabs" id="tabs">
+      <button data-tab="inputs" class="active">Inputs</button>
+      <button data-tab="outputs">Outputs</button>
+      <button data-tab="docs">API Docs</button>
+      <button data-tab="notes">Lua Notes</button>
+    </div>
+    <div class="panel-body">
+      <div class="tabpane active" id="tab-inputs">
+        <div class="rangecfg"><span class="hint">Each number input has its own min / max boxes. Channels mirror your code.</span></div>
+        <div class="io-grid">
+          <div class="io-col">
+            <h3>Numbers <button id="addNum" class="addbtn">+ add</button></h3>
+            <div id="numInputs"></div>
+          </div>
+          <div class="io-col">
+            <h3>Booleans <button id="addBool" class="addbtn">+ add</button></h3>
+            <div id="boolInputs"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tabpane" id="tab-outputs">
+        <div class="io-grid">
+          <div class="io-col">
+            <h3>Numbers (output.setNumber)</h3>
+            <div id="numOutputs"><div class="hint">nothing set yet</div></div>
+          </div>
+          <div class="io-col">
+            <h3>Booleans (output.setBool)</h3>
+            <div id="boolOutputs"><div class="hint">nothing set yet</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tabpane docs" id="tab-docs"></div>
+      <div class="tabpane docs" id="tab-notes"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+/* ============================================================================
+   1. PIXEL FONT  (Stormworks-style 3x5 glyphs, 4px advance, 6px line height)
+   Each glyph = 5 rows of 3 columns. '1' = lit pixel.
+============================================================================ */
+const FONT = (function(){
+  const g = {};
+  const def = (ch, rows) => { g[ch] = rows; };
+  def(' ',["000","000","000","000","000"]);
+  // digits
+  def('0',["111","101","101","101","111"]);
+  def('1',["010","110","010","010","111"]);
+  def('2',["111","001","111","100","111"]);
+  def('3',["111","001","111","001","111"]);
+  def('4',["101","101","111","001","001"]);
+  def('5',["111","100","111","001","111"]);
+  def('6',["111","100","111","101","111"]);
+  def('7',["111","001","010","010","010"]);
+  def('8',["111","101","111","101","111"]);
+  def('9',["111","101","111","001","111"]);
+  // uppercase
+  def('A',["111","101","111","101","101"]);
+  def('B',["110","101","110","101","110"]);
+  def('C',["111","100","100","100","111"]);
+  def('D',["110","101","101","101","110"]);
+  def('E',["111","100","111","100","111"]);
+  def('F',["111","100","111","100","100"]);
+  def('G',["111","100","101","101","111"]);
+  def('H',["101","101","111","101","101"]);
+  def('I',["111","010","010","010","111"]);
+  def('J',["001","001","001","101","111"]);
+  def('K',["101","101","110","101","101"]);
+  def('L',["100","100","100","100","111"]);
+  def('M',["101","111","111","101","101"]);
+  def('N',["101","111","111","111","101"]);
+  def('O',["111","101","101","101","111"]);
+  def('P',["111","101","111","100","100"]);
+  def('Q',["111","101","101","111","011"]);
+  def('R',["111","101","110","101","101"]);
+  def('S',["111","100","111","001","111"]);
+  def('T',["111","010","010","010","010"]);
+  def('U',["101","101","101","101","111"]);
+  def('V',["101","101","101","101","010"]);
+  def('W',["101","101","111","111","101"]);
+  def('X',["101","101","010","101","101"]);
+  def('Y',["101","101","010","010","010"]);
+  def('Z',["111","001","010","100","111"]);
+  // lowercase
+  def('a',["000","011","101","101","011"]);
+  def('b',["100","100","110","101","110"]);
+  def('c',["000","011","100","100","011"]);
+  def('d',["001","001","011","101","011"]);
+  def('e',["000","010","101","110","011"]);
+  def('f',["001","010","111","010","010"]);
+  def('g',["000","011","101","011","110"]);
+  def('h',["100","100","110","101","101"]);
+  def('i',["010","000","010","010","010"]);
+  def('j',["010","000","010","010","110"]);
+  def('k',["100","101","110","110","101"]);
+  def('l',["110","010","010","010","011"]);
+  def('m',["000","101","111","111","101"]);
+  def('n',["000","110","101","101","101"]);
+  def('o',["000","010","101","101","010"]);
+  def('p',["000","110","101","110","100"]);
+  def('q',["000","011","101","011","001"]);
+  def('r',["000","011","100","100","100"]);
+  def('s',["000","011","110","011","110"]);
+  def('t',["010","111","010","010","011"]);
+  def('u',["000","101","101","101","011"]);
+  def('v',["000","101","101","101","010"]);
+  def('w',["000","101","111","111","101"]);
+  def('x',["000","101","010","010","101"]);
+  def('y',["000","101","101","011","110"]);
+  def('z',["000","111","001","010","111"]);
+  // punctuation
+  def('.',["000","000","000","000","010"]);
+  def(',',["000","000","000","010","100"]);
+  def(':',["000","010","000","010","000"]);
+  def(';',["000","010","000","010","100"]);
+  def('!',["010","010","010","000","010"]);
+  def('?',["111","001","011","000","010"]);
+  def("'",["010","010","000","000","000"]);
+  def('"',["101","101","000","000","000"]);
+  def('-',["000","000","111","000","000"]);
+  def('+',["000","010","111","010","000"]);
+  def('=',["000","111","000","111","000"]);
+  def('*',["000","101","010","101","000"]);
+  def('/',["001","001","010","100","100"]);
+  def('\\',["100","100","010","001","001"]);
+  def('%',["101","001","010","100","101"]);
+  def('(',["001","010","010","010","001"]);
+  def(')',["100","010","010","010","100"]);
+  def('[',["011","010","010","010","011"]);
+  def(']',["110","010","010","010","110"]);
+  def('<',["001","010","100","010","001"]);
+  def('>',["100","010","001","010","100"]);
+  def('_',["000","000","000","000","111"]);
+  def('|',["010","010","010","010","010"]);
+  def('#',["101","111","101","111","101"]);
+  def('&',["010","101","010","101","011"]);
+  def('@',["111","101","111","100","111"]);
+  def('$',["011","110","011","110","010"]);
+  def('°',["111","101","111","000","000"]);
+  def('^',["010","101","000","000","000"]);
+  def('~',["000","000","011","110","000"]);
+  return g;
+})();
+
+/* ============================================================================
+   2. SCREEN  — software pixel renderer matching the Stormworks screen API.
+   We draw into an ImageData buffer at native resolution, then scale up.
+============================================================================ */
+const Screen = {
+  cvs:null, ctx:null, W:64, H:64, buf:null, col:[255,255,255,255],
+
+  attach(canvas){ this.cvs = canvas; this.ctx = canvas.getContext('2d'); this.ctx.imageSmoothingEnabled = false; },
+  setSize(w,h){ this.W=w; this.H=h; this.cvs.width=w; this.cvs.height=h; this.buf = this.ctx.createImageData(w,h); },
+
+  clear(r,g,b){ // wipe whole buffer to a solid colour (default black each frame)
+    const d=this.buf.data;
+    for(let i=0;i<d.length;i+=4){ d[i]=r; d[i+1]=g; d[i+2]=b; d[i+3]=255; }
+  },
+  px(x,y){ // alpha-blended single pixel
+    x=Math.floor(x); y=Math.floor(y);
+    if(x<0||y<0||x>=this.W||y>=this.H) return;
+    const i=(y*this.W+x)*4, d=this.buf.data;
+    const a=this.col[3]/255, ia=1-a;
+    d[i]  = this.col[0]*a + d[i]*ia;
+    d[i+1]= this.col[1]*a + d[i+1]*ia;
+    d[i+2]= this.col[2]*a + d[i+2]*ia;
+    d[i+3]= 255;
+  },
+  setColor(r,g,b,a){ if(a===undefined||a===null) a=255; this.col=[clamp255(r),clamp255(g),clamp255(b),clamp255(a)]; },
+
+  rectF(x,y,w,h){ x=Math.floor(x);y=Math.floor(y);w=Math.floor(w);h=Math.floor(h);
+    for(let j=0;j<h;j++) for(let i=0;i<w;i++) this.px(x+i,y+j); },
+  rect(x,y,w,h){ x=Math.floor(x);y=Math.floor(y);w=Math.floor(w);h=Math.floor(h);
+    for(let i=0;i<w;i++){ this.px(x+i,y); this.px(x+i,y+h-1); }
+    for(let j=0;j<h;j++){ this.px(x,y+j); this.px(x+w-1,y+j); } },
+  line(x1,y1,x2,y2){ // Bresenham
+    x1=Math.floor(x1);y1=Math.floor(y1);x2=Math.floor(x2);y2=Math.floor(y2);
+    let dx=Math.abs(x2-x1), dy=-Math.abs(y2-y1);
+    let sx=x1<x2?1:-1, sy=y1<y2?1:-1, err=dx+dy;
+    while(true){ this.px(x1,y1); if(x1===x2&&y1===y2) break;
+      let e2=2*err; if(e2>=dy){err+=dy;x1+=sx;} if(e2<=dx){err+=dx;y1+=sy;} } },
+  circle(cx,cy,r){ // midpoint outline
+    cx=Math.floor(cx);cy=Math.floor(cy);r=Math.floor(r);
+    let x=r,y=0,err=1-r;
+    while(x>=y){
+      this.px(cx+x,cy+y);this.px(cx+y,cy+x);this.px(cx-y,cy+x);this.px(cx-x,cy+y);
+      this.px(cx-x,cy-y);this.px(cx-y,cy-x);this.px(cx+y,cy-x);this.px(cx+x,cy-y);
+      y++; if(err<0){err+=2*y+1;} else {x--; err+=2*(y-x)+1;} } },
+  circleF(cx,cy,r){ cx=Math.floor(cx);cy=Math.floor(cy);r=Math.floor(r);
+    for(let y=-r;y<=r;y++) for(let x=-r;x<=r;x++) if(x*x+y*y<=r*r) this.px(cx+x,cy+y); },
+  triangle(x1,y1,x2,y2,x3,y3){ this.line(x1,y1,x2,y2);this.line(x2,y2,x3,y3);this.line(x3,y3,x1,y1); },
+  triangleF(x1,y1,x2,y2,x3,y3){
+    const minX=Math.floor(Math.min(x1,x2,x3)), maxX=Math.ceil(Math.max(x1,x2,x3));
+    const minY=Math.floor(Math.min(y1,y2,y3)), maxY=Math.ceil(Math.max(y1,y2,y3));
+    const area=(x2-x1)*(y3-y1)-(x3-x1)*(y2-y1);
+    if(area===0) return;
+    for(let y=minY;y<=maxY;y++) for(let x=minX;x<=maxX;x++){
+      const w0=((x2-x1)*(y-y1)-(y2-y1)*(x-x1));
+      const w1=((x3-x2)*(y-y2)-(y3-y2)*(x-x2));
+      const w2=((x1-x3)*(y-y3)-(y1-y3)*(x-x3));
+      if((w0>=0&&w1>=0&&w2>=0)||(w0<=0&&w1<=0&&w2<=0)) this.px(x,y);
+    } },
+  glyph(gx,gy,rows){ for(let r=0;r<5;r++){ const row=rows[r]; for(let c=0;c<3;c++) if(row[c]==='1') this.px(gx+c,gy+r); } },
+  text(x,y,str){
+    x=Math.floor(x); y=Math.floor(y); let cx=x;
+    for(const ch of String(str).toUpperCase()){   // Stormworks renders text in CAPITALS
+      if(ch==='\n'){ y+=6; cx=x; continue; }
+      const rows = FONT[ch] || FONT['?'];
+      this.glyph(cx,y,rows); cx+=4;
+    } },
+  textWidth(str){ let max=0,cur=0; for(const ch of String(str)){ if(ch==='\n'){max=Math.max(max,cur);cur=0;} else cur+=4; } return Math.max(max,cur); },
+  textBox(x,y,w,h,str,halign,valign){
+    // word-wrap to width w (4px per char), then align inside the box
+    halign=halign||0; valign=valign||0;
+    const maxChars=Math.max(1,Math.floor(w/4));
+    const words=String(str).split(/(\s+)/), lines=[]; let line="";
+    const pushWord=(word)=>{
+      if(word==="") return;
+      if(word.length>maxChars){ // hard-break very long tokens
+        for(let i=0;i<word.length;i+=maxChars){ if(line) {lines.push(line); line="";} lines.push(word.substr(i,maxChars)); }
+        return;
+      }
+      if((line.length+word.length)>maxChars){ lines.push(line); line=word.replace(/^\s+/,''); }
+      else line+=word;
+    };
+    for(const tok of words){ if(tok.includes('\n')){ const parts=tok.split('\n'); for(let i=0;i<parts.length;i++){ pushWord(parts[i]); if(i<parts.length-1){lines.push(line);line="";} } } else pushWord(tok); }
+    if(line) lines.push(line);
+    const lh=6, total=lines.length*lh;
+    let ty = y + (valign<0?0 : valign>0? (h-total) : Math.floor((h-total)/2));
+    for(const ln of lines){
+      const lw=ln.length*4;
+      let tx = x + (halign<0?0 : halign>0? (w-lw) : Math.floor((w-lw)/2));
+      this.text(tx,ty,ln); ty+=lh;
+    }
+  },
+};
+function clamp255(v){ v=Math.round(v||0); return v<0?0:v>255?255:v; }
+
+/* ============================================================================
+   3. INPUT / OUTPUT state
+============================================================================ */
+const NUM_CH = 32;
+const inputNumbers = new Array(NUM_CH+1).fill(0);
+const inputBools   = new Array(NUM_CH+1).fill(false);
+let outputNumbers  = {};
+let outputBools    = {};
+
+// view + line-tool state
+let gridOn=true;
+let linePrev=null;            // {x1,y1,x2,y2} preview while dragging a line
+
+// Mask Lua comments and string literals with spaces (same length) so we can
+// scan for block keywords by position without false hits inside strings/comments.
+function maskLua(code){
+  let out='', i=0, n=code.length;
+  while(i<n){
+    if(code[i]==='-'&&code[i+1]==='-'){
+      if(code[i+2]==='['&&code[i+3]==='['){ out+='    '; i+=4;
+        while(i<n && !(code[i]===']'&&code[i+1]===']')){ out+=code[i]==='\n'?'\n':' '; i++; }
+        if(i<n){ out+='  '; i+=2; } continue; }
+      while(i<n && code[i]!=='\n'){ out+=' '; i++; } continue;
+    }
+    if(code[i]==='"'||code[i]==="'"){ const q=code[i]; out+=' '; i++;
+      while(i<n && code[i]!==q){ if(code[i]==='\\'){ out+='  '; i+=2; } else { out+=code[i]==='\n'?'\n':' '; i++; } }
+      if(i<n){ out+=' '; i++; } continue; }
+    out+=code[i]; i++;
+  }
+  return out;
+}
+// Insert a statement line inside function <fnName>'s body (before its matching 'end').
+// Creates the function (before onDraw if it's onTick) when it doesn't exist yet.
+function insertIntoFunction(code, fnName, line){
+  const masked=maskLua(code);
+  const open=new RegExp('function\\s+'+fnName+'\\s*\\(','g');
+  const m=open.exec(masked);
+  if(m){
+    // find matching end starting after the opener
+    let i=m.index+m[0].length, depth=1;
+    const kw=/\b(function|if|for|while|end)\b/g; kw.lastIndex=i;
+    let t;
+    while((t=kw.exec(masked))){
+      if(t[1]==='end'){ depth--; if(depth===0){ break; } }
+      else depth++;
+    }
+    if(t){ const at=t.index;             // position of the matching 'end' in original
+      // indentation = whitespace before 'end'
+      const lineStart=code.lastIndexOf('\n',at-1)+1;
+      const indent=(code.slice(lineStart,at).match(/^\s*/)||[''])[0];
+      const ins=indent+'  '+line+'\n';
+      return code.slice(0,lineStart)+ins+code.slice(lineStart);
+    }
+  }
+  // function not found → create it
+  const block='function '+fnName+'()\n  '+line+'\nend\n';
+  if(fnName==='onTick'){
+    const od=maskLua(code).search(/function\s+onDraw\s*\(/);
+    if(od>=0){ const ls=code.lastIndexOf('\n',od-1)+1; return code.slice(0,ls)+block+'\n'+code.slice(ls); }
+  }
+  return code.replace(/\s*$/,'')+'\n\n'+block;
+}
+
+/* ============================================================================
+   4. LUA RUNTIME (Fengari bridge)
+============================================================================ */
+let L = null, fengariReady = (typeof fengari !== 'undefined');
+let onTickRef=false, onDrawRef=false, lastError=null;
+
+function lua(){ return fengari.lua; }
+function aux(){ return fengari.lauxlib; }
+function lib(){ return fengari.lualib; }
+const S = s => fengari.to_luastring(s);
+const JS = a => fengari.to_jsstring(a);
+
+function regTable(name, fns){
+  const lo=lua();
+  lo.lua_newtable(L);
+  for(const k in fns){ lo.lua_pushcfunction(L, fns[k]); lo.lua_setfield(L, -2, S(k)); }
+  lo.lua_setglobal(L, S(name));
+}
+
+function buildLuaState(){
+  const lo=lua(), lx=aux();
+  L = lx.luaL_newstate();
+  lib().luaL_openlibs(L);
+
+  // ---- screen.* ----
+  regTable('screen', {
+    getWidth:  (L)=>{ lo.lua_pushinteger(L, Screen.W); return 1; },
+    getHeight: (L)=>{ lo.lua_pushinteger(L, Screen.H); return 1; },
+    setColor:  (L)=>{ Screen.setColor(lx.luaL_checknumber(L,1),lx.luaL_checknumber(L,2),lx.luaL_checknumber(L,3),lx.luaL_optnumber(L,4,255)); return 0; },
+    drawClear: (L)=>{ Screen.clear(Screen.col[0],Screen.col[1],Screen.col[2]); return 0; },
+    drawRect:  (L)=>{ Screen.rect(lx.luaL_checknumber(L,1),lx.luaL_checknumber(L,2),lx.luaL_checknumber(L,3),lx.luaL_checknumber(L,4)); return 0; },
+    drawRectF: (L)=>{ Screen.rectF(lx.luaL_checknumber(L,1),lx.luaL_checknumber(L,2),lx.luaL_checknumber(L,3),lx.luaL_checknumber(L,4)); return 0; },
+    drawLine:  (L)=>{ Screen.line(lx.luaL_checknumber(L,1),lx.luaL_checknumber(L,2),lx.luaL_checknumber(L,3),lx.luaL_checknumber(L,4)); return 0; },
+    drawCircle:(L)=>{ Screen.circle(lx.luaL_checknumber(L,1),lx.luaL_checknumber(L,2),lx.luaL_checknumber(L,3)); return 0; },
+    drawCircleF:(L)=>{ Screen.circleF(lx.luaL_checknumber(L,1),lx.luaL_checknumber(L,2),lx.luaL_checknumber(L,3)); return 0; },
+    drawTriangle:(L)=>{ Screen.triangle(lx.luaL_checknumber(L,1),lx.luaL_checknumber(L,2),lx.luaL_checknumber(L,3),lx.luaL_checknumber(L,4),lx.luaL_checknumber(L,5),lx.luaL_checknumber(L,6)); return 0; },
+    drawTriangleF:(L)=>{ Screen.triangleF(lx.luaL_checknumber(L,1),lx.luaL_checknumber(L,2),lx.luaL_checknumber(L,3),lx.luaL_checknumber(L,4),lx.luaL_checknumber(L,5),lx.luaL_checknumber(L,6)); return 0; },
+    drawText:  (L)=>{ Screen.text(lx.luaL_checknumber(L,1),lx.luaL_checknumber(L,2), JS(lx.luaL_checkstring(L,3))); return 0; },
+    drawTextBox:(L)=>{ Screen.textBox(lx.luaL_checknumber(L,1),lx.luaL_checknumber(L,2),lx.luaL_checknumber(L,3),lx.luaL_checknumber(L,4), JS(lx.luaL_checkstring(L,5)), lx.luaL_optnumber(L,6,0), lx.luaL_optnumber(L,7,0)); return 0; },
+    // map drawing exists in SW but isn't simulated here; provide no-op stubs so scripts don't crash
+    drawMap:   (L)=>0, setMapColorBase:(L)=>0, setMapColorOcean:(L)=>0, setMapColorShallows:(L)=>0,
+    setMapColorLand:(L)=>0, setMapColorGrass:(L)=>0, setMapColorSand:(L)=>0, setMapColorSnow:(L)=>0,
+    setMapColorRock:(L)=>0, setMapColorGravel:(L)=>0,
+  });
+
+  // ---- input.* ----
+  regTable('input', {
+    getNumber:(L)=>{ const c=lx.luaL_checkinteger(L,1); lo.lua_pushnumber(L, (c>=1&&c<=NUM_CH)?inputNumbers[c]:0); return 1; },
+    getBool:  (L)=>{ const c=lx.luaL_checkinteger(L,1); lo.lua_pushboolean(L, (c>=1&&c<=NUM_CH)?(inputBools[c]?1:0):0); return 1; },
+  });
+
+  // ---- output.* ----
+  regTable('output', {
+    setNumber:(L)=>{ const c=lx.luaL_checkinteger(L,1); outputNumbers[c]=lx.luaL_checknumber(L,2); return 0; },
+    setBool:  (L)=>{ const c=lx.luaL_checkinteger(L,1); outputBools[c]=lo.lua_toboolean(L,2); return 0; },
+  });
+
+  // ---- property.* (returns defaults; here so scripts that use it don't error) ----
+  regTable('property', {
+    getNumber:(L)=>{ lo.lua_pushnumber(L,0); return 1; },
+    getBool:  (L)=>{ lo.lua_pushboolean(L,0); return 1; },
+    getText:  (L)=>{ lo.lua_pushstring(L, S("")); return 1; },
+  });
+
+  // ---- override print() to write to our console ----
+  lo.lua_pushcfunction(L, (L)=>{
+    const n=lo.lua_gettop(L), parts=[];
+    for(let i=1;i<=n;i++) parts.push( JS(lx.luaL_tolstring(L,i)) );
+    logLine(parts.join('\t'),'print');
+    return 0;
+  });
+  lo.lua_setglobal(L, S('print'));
+}
+
+// Load the user's code into the (fresh) state. Returns true on success.
+function loadUserCode(code){
+  const lo=lua(), lx=aux();
+  outputNumbers={}; outputBools={}; lastError=null;
+  let st = lx.luaL_loadstring(L, S(code));
+  if(st !== lua().LUA_OK){ const msg=JS(lo.lua_tojsstring(L,-1)); logLine("Compile error: "+msg+luaHint(msg),'err'); lo.lua_pop(L,1); showScreenError("SYNTAX"); return false; }
+  st = lo.lua_pcall(L,0,0,0);
+  if(st !== lua().LUA_OK){ const msg=lo.lua_tojsstring(L,-1); logLine("Error while loading: "+msg+luaHint(msg),'err'); lo.lua_pop(L,1); showScreenError("ERROR"); return false; }
+  // remember whether onTick / onDraw were defined
+  lo.lua_getglobal(L, S('onTick')); onTickRef = lo.lua_isfunction(L,-1); lo.lua_pop(L,1);
+  lo.lua_getglobal(L, S('onDraw')); onDrawRef = lo.lua_isfunction(L,-1); lo.lua_pop(L,1);
+  if(!onTickRef && !onDrawRef) logLine("Heads up: no onTick() or onDraw() defined — nothing will happen.",'info');
+  return true;
+}
+
+function callGlobal(name){
+  if(lastError) return; // stay stopped after an error
+  const lo=lua();
+  lo.lua_getglobal(L, S(name));
+  if(!lo.lua_isfunction(L,-1)){ lo.lua_pop(L,1); return; }
+  const st = lo.lua_pcall(L,0,0,0);
+  if(st !== lua().LUA_OK){
+    lastError = lo.lua_tojsstring(L,-1);
+    logLine("Runtime error in "+name+"(): "+lastError+luaHint(lastError),'err');
+    lo.lua_pop(L,1);
+    stopLoop();
+    showScreenError("ERROR");
+  }
+}
+
+/* ============================================================================
+   5. RUN LOOP
+============================================================================ */
+let live=false, tick=0, rafId=null, codeLoaded=false;   // 'live' = continuous loop intent
+let frameTimes=[], lastFrame=performance.now();
+function isLooping(){ return rafId!==null; }
+
+function doTick(){
+  outputNumbers={}; outputBools={};
+  syncInputsFromUI();
+  callGlobal('onTick');
+  if(lastError) return;         // keep the error screen up instead of wiping it
+  Screen.clear(0,0,0);          // monitor wipes to black every frame
+  Screen.col=[255,255,255,255]; // default colour each frame (like in game)
+  callGlobal('onDraw');
+  renderCanvas();
+  refreshOutputs();
+  tick++;
+}
+
+function loop(now){
+  if(!live){ rafId=null; return; }
+  doTick();
+  if(lastError){ stopLoop(); return; }    // a runtime error pauses the loop
+  frameTimes.push(now-lastFrame); lastFrame=now;
+  if(frameTimes.length>30) frameTimes.shift();
+  const avg=frameTimes.reduce((a,b)=>a+b,0)/frameTimes.length;
+  document.getElementById('tickInfo').textContent = `tick ${tick} · ${Math.round(1000/avg)} fps`;
+  rafId=requestAnimationFrame(loop);
+}
+
+// (Re)compile the user's code into a fresh Lua state.
+function rebuild(){ buildLuaState(); codeLoaded=loadUserCode(getCode()); tick=0; lastError=null; }
+function startLoop(){ live=true; if(rafId) return; lastFrame=performance.now(); frameTimes=[]; rafId=requestAnimationFrame(loop); }
+function stopLoop(){ live=false; if(rafId) cancelAnimationFrame(rafId); rafId=null; }
+
+// Reset = recompile fresh and run live from tick 0.
+function reset(){
+  if(!fengariReady){ logLine("Lua engine not loaded — connect to the internet once and reload.",'err'); return; }
+  stopLoop(); clearConsole(); rebuild();
+  if(codeLoaded) startLoop();
+}
+// Step = pause the live loop and advance exactly one tick.
+function step(){
+  if(!fengariReady){ logLine("Lua engine not loaded (need internet once to fetch it).",'err'); return; }
+  stopLoop();
+  if(!codeLoaded){ rebuild(); if(!codeLoaded) return; }
+  doTick();
+  document.getElementById('tickInfo').textContent=`tick ${tick} · paused (Reset to resume)`;
+}
+// Called (debounced) whenever the code changes: recompile and keep going live.
+function liveReload(){
+  if(!fengariReady) return;
+  const wasLive = live;
+  stopLoop(); rebuild();
+  if(codeLoaded){ if(wasLive) startLoop(); else doTick(); }
+}
+
+/* ============================================================================
+   6. CANVAS scaling
+============================================================================ */
+const scratch = document.createElement('canvas');
+let currentZoom = 4;
+function getZoom(){
+  const view=document.getElementById('screen');
+  let zoom=parseInt(document.getElementById('zoomSel').value,10);
+  if(zoom===0){ // Fit — fill the available screen area as much as possible
+    const maxW=view.parentElement.clientWidth-24, maxH=window.innerHeight*0.55;
+    zoom=Math.max(1, Math.floor(Math.min(maxW/Screen.W, maxH/Screen.H)));
+  }
+  return zoom;
+}
+function renderCanvas(){
+  const view=document.getElementById('screen');
+  const zoom=getZoom(); currentZoom=zoom;
+  scratch.width=Screen.W; scratch.height=Screen.H;
+  const sctx=scratch.getContext('2d');
+  const img=sctx.createImageData(Screen.W,Screen.H);
+  img.data.set(Screen.buf.data);
+  sctx.putImageData(img,0,0);
+  view.width=Screen.W*zoom; view.height=Screen.H*zoom;
+  view.style.width=(Screen.W*zoom)+'px'; view.style.height=(Screen.H*zoom)+'px';   // exact 1:1 display
+  const c=view.getContext('2d'); c.imageSmoothingEnabled=false;
+  c.clearRect(0,0,view.width,view.height);
+  c.drawImage(scratch,0,0,Screen.W*zoom,Screen.H*zoom);
+  if(gridOn) drawGrid(c,zoom);
+  if(linePrev){                              // preview the shape you're dragging
+    const z=zoom, h=z/2;
+    const X1=linePrev.x1*z+h, Y1=linePrev.y1*z+h, X2=linePrev.x2*z+h, Y2=linePrev.y2*z+h;
+    c.strokeStyle = (tool==='eraser')?'rgba(255,255,255,0.8)':document.getElementById('toolColor').value;
+    c.lineWidth=Math.max(1,Math.round(z/3)); c.beginPath();
+    if(tool==='line'){ c.moveTo(X1,Y1); c.lineTo(X2,Y2); c.stroke(); }
+    else if(tool==='rect'||tool==='eraser'){ c.strokeRect(Math.min(X1,X2),Math.min(Y1,Y2),Math.abs(X2-X1),Math.abs(Y2-Y1)); }
+    else if(tool==='circle'){ c.arc(X1,Y1,Math.hypot(X2-X1,Y2-Y1),0,Math.PI*2); c.stroke(); }
+    else if(tool==='triangle'){ const x1=Math.min(X1,X2),x2=Math.max(X1,X2),y1=Math.min(Y1,Y2),y2=Math.max(Y1,Y2),mx=(x1+x2)/2;
+      c.moveTo(x1,y2); c.lineTo(mx,y1); c.lineTo(x2,y2); c.closePath(); c.stroke(); }
+  }
+}
+function drawGrid(c,zoom){
+  if(zoom<2) return;                       // too small to be useful below 2x
+  const W=Screen.W*zoom, H=Screen.H*zoom;
+  c.lineWidth=1; c.strokeStyle='rgba(150,150,160,0.22)';   // one uniform pixel grid, no subgrid
+  c.beginPath();
+  for(let x=0;x<=Screen.W;x++){ const gx=(x===Screen.W?W-0.5:x*zoom+0.5); c.moveTo(gx,0); c.lineTo(gx,H); }
+  for(let y=0;y<=Screen.H;y++){ const gy=(y===Screen.H?H-0.5:y*zoom+0.5); c.moveTo(0,gy); c.lineTo(W,gy); }
+  c.stroke();
+}
+// Paint a visible error onto the screen so a broken script isn't just a frozen frame.
+function showScreenError(tag){
+  Screen.clear(0,0,0);
+  Screen.setColor(255,70,70); Screen.text(2,2,tag||"ERROR");
+  Screen.setColor(180,180,180); Screen.text(2,10,"see log");
+  renderCanvas();
+  document.getElementById('tickInfo').textContent='● code error';
+}
+// Friendly nudge for the most common beginner mistake: using { } like C/JS.
+function luaHint(msg){
+  if(/[{}]/.test(String(msg)))
+    return "\n  ⟶ Tip: Lua has no { } braces. Close blocks with 'end', e.g.  function onTick() ... end";
+  return "";
+}
+
+/* ============================================================================
+   7. CONSOLE
+============================================================================ */
+function logLine(msg,cls){ const el=document.getElementById('console');
+  const d=document.createElement('div'); if(cls) d.className=cls; d.textContent=msg; el.appendChild(d); el.scrollTop=el.scrollHeight; }
+function clearConsole(){ document.getElementById('console').innerHTML=''; }
+
+/* ============================================================================
+   8. EDITOR (CodeMirror if available, otherwise plain textarea)
+============================================================================ */
+let cm=null;
+function initEditor(){
+  const ta=document.getElementById('editor');
+  if(typeof CodeMirror!=='undefined'){
+    try{
+      cm=CodeMirror.fromTextArea(ta,{mode:'lua',theme:'material-darker',lineNumbers:true,indentUnit:4,tabSize:4,indentWithTabs:false,lineWrapping:false});
+      cm.setSize('100%','100%');
+      return;
+    }catch(e){ cm=null; }
+  }
+  // fallback: tab support
+  ta.style.display='block';
+  ta.addEventListener('keydown',e=>{ if(e.key==='Tab'){ e.preventDefault(); const s=ta.selectionStart,en=ta.selectionEnd;
+    ta.value=ta.value.slice(0,s)+'    '+ta.value.slice(en); ta.selectionStart=ta.selectionEnd=s+4; } });
+}
+function getCode(){ return cm? cm.getValue() : document.getElementById('editor').value; }
+function setCode(t){ if(cm) cm.setValue(t); else document.getElementById('editor').value=t; }
+function insertAtCursor(text){
+  if(cm){ cm.replaceSelection(text); cm.focus(); }
+  else { const ta=document.getElementById('editor'), s=ta.selectionStart, e=ta.selectionEnd;
+    ta.value=ta.value.slice(0,s)+text+ta.value.slice(e); ta.selectionStart=ta.selectionEnd=s+text.length; ta.focus(); }
+}
+
+/* ============================================================================
+   9. INPUT / OUTPUT UI
+============================================================================ */
+let activeNum=[], activeBool=[];   // channels shown in the panel — derived from the code
+
+// Scan the editor code for input.getNumber(N) / input.getBool(N) literals.
+function parseChannels(code){
+  code = code.replace(/--\[\[[\s\S]*?\]\]/g,'').replace(/--.*$/gm,'');  // strip comments
+  const nums=new Set(), bools=new Set(); let m;
+  const reN=/input\.getNumber\s*\(\s*(\d+)\s*\)/g;
+  while((m=reN.exec(code))){ const c=+m[1]; if(c>=1&&c<=NUM_CH) nums.add(c); }
+  const reB=/input\.getBool\s*\(\s*(\d+)\s*\)/g;
+  while((m=reB.exec(code))){ const c=+m[1]; if(c>=1&&c<=NUM_CH) bools.add(c); }
+  return { nums:[...nums].sort((a,b)=>a-b), bools:[...bools].sort((a,b)=>a-b) };
+}
+// Make the Inputs panel mirror exactly what the code references.
+function syncChannelsFromCode(){
+  const p=parseChannels(getCode());
+  activeNum=p.nums; activeBool=p.bools;
+  buildInputUI();
+}
+
+const chMin={}, chMax={};                       // per-channel slider interval
+function getMin(c){ return chMin[c]!==undefined?chMin[c]:-1; }
+function getMax(c){ return chMax[c]!==undefined?chMax[c]: 1; }
+
+function buildInputUI(){
+  const nWrap=document.getElementById('numInputs'), bWrap=document.getElementById('boolInputs');
+  nWrap.innerHTML=''; bWrap.innerHTML='';
+  if(!activeNum.length)  nWrap.innerHTML='<div class="hint">none — use input.getNumber(n) in your code (or click “+ add”)</div>';
+  if(!activeBool.length) bWrap.innerHTML='<div class="hint">none — use input.getBool(n) in your code (or click “+ add”)</div>';
+  activeNum.forEach(c=>{
+    const mn=getMin(c), mx=getMax(c);
+    const row=document.createElement('div'); row.className='chan';
+    row.innerHTML=`<span class="cl">N${c}</span>
+      <input type="number" step="0.1" value="${mn}" data-ch="${c}" class="minbox" title="min">
+      <input type="range" min="${mn}" max="${mx}" step="0.001" value="${clampRange(inputNumbers[c],mn,mx)}" data-ch="${c}" class="nrange">
+      <input type="number" step="0.1" value="${mx}" data-ch="${c}" class="maxbox" title="max">
+      <input type="number" step="0.01" value="${inputNumbers[c]}" data-ch="${c}" class="nbox" title="value">
+      <button class="rm" data-ch="${c}" data-kind="n" title="remove (deletes its code line)">×</button>`;
+    nWrap.appendChild(row);
+  });
+  activeBool.forEach(c=>{
+    const row=document.createElement('div'); row.className='bchan';
+    row.innerHTML=`<span class="cl">B${c}</span>
+      <label><input type="checkbox" data-ch="${c}" class="bbox" ${inputBools[c]?'checked':''}> on</label>
+      <button class="rm" data-ch="${c}" data-kind="b" title="remove (deletes its code line)">×</button>`;
+    bWrap.appendChild(row);
+  });
+  nWrap.querySelectorAll('.nrange').forEach(el=>el.addEventListener('input',e=>{
+    const c=+e.target.dataset.ch; inputNumbers[c]=parseFloat(e.target.value);
+    nWrap.querySelector(`.nbox[data-ch="${c}"]`).value=(+inputNumbers[c]).toFixed(3); maybeStill(); }));
+  nWrap.querySelectorAll('.nbox').forEach(el=>el.addEventListener('input',e=>{
+    const c=+e.target.dataset.ch; inputNumbers[c]=parseFloat(e.target.value)||0;
+    const r=nWrap.querySelector(`.nrange[data-ch="${c}"]`); if(r) r.value=clampRange(inputNumbers[c],getMin(c),getMax(c)); maybeStill(); }));
+  nWrap.querySelectorAll('.minbox').forEach(el=>el.addEventListener('change',e=>{
+    chMin[+e.target.dataset.ch]=parseFloat(e.target.value)||0; buildInputUI(); }));
+  nWrap.querySelectorAll('.maxbox').forEach(el=>el.addEventListener('change',e=>{
+    chMax[+e.target.dataset.ch]=parseFloat(e.target.value)||0; buildInputUI(); }));
+  bWrap.querySelectorAll('.bbox').forEach(el=>el.addEventListener('change',e=>{
+    inputBools[+e.target.dataset.ch]=e.target.checked; maybeStill(); }));
+  document.querySelectorAll('#tab-inputs .rm').forEach(el=>el.addEventListener('click',e=>{
+    removeChannel(e.currentTarget.dataset.kind, +e.currentTarget.dataset.ch); }));
+}
+// × removes a channel by deleting any code line that references it (keeps code as the source of truth).
+function removeChannel(kind, c){
+  const pat = kind==='n'
+    ? new RegExp('input\\.getNumber\\s*\\(\\s*'+c+'\\s*\\)')
+    : new RegExp('input\\.getBool\\s*\\(\\s*'+c+'\\s*\\)');
+  const kept=getCode().split('\n').filter(ln=>!pat.test(ln));
+  setCode(kept.join('\n')); syncChannelsFromCode(); liveReload();
+}
+// "+ add": pick the next unused channel and add a proper statement INSIDE onTick (creating it if needed).
+function addNumInput(){ const c=nextFree(parseChannels(getCode()).nums);
+  if(c===null){logLine('All 32 number channels are already used.','info');return;}
+  setCode(insertIntoFunction(getCode(),'onTick','n'+c+' = input.getNumber('+c+')')); syncChannelsFromCode(); }
+function addBoolInput(){ const c=nextFree(parseChannels(getCode()).bools);
+  if(c===null){logLine('All 32 boolean channels are already used.','info');return;}
+  setCode(insertIntoFunction(getCode(),'onTick','b'+c+' = input.getBool('+c+')')); syncChannelsFromCode(); }
+function nextFree(list){ for(let i=1;i<=NUM_CH;i++) if(!list.includes(i)) return i; return null; }
+function clampRange(v,min,max){ return v<min?min:v>max?max:v; }
+function syncInputsFromUI(){ /* values are already mirrored into arrays by listeners */ }
+// if paused (after Step) and code is loaded, redraw so you see input changes immediately
+function maybeStill(){ if(!isLooping() && codeLoaded && fengariReady && !lastError){
+  Screen.clear(0,0,0); Screen.col=[255,255,255,255];
+  outputNumbers={}; outputBools={}; callGlobal('onTick'); callGlobal('onDraw'); renderCanvas(); refreshOutputs(); } }
+
+/* ---- drawing tools: each drag/click edits the screen.* calls in onDraw ---- */
+let tool='move', fillShape=false, dragStart=null, moveTarget=null;
+function blurEditor(){ const ae=document.activeElement; if(ae && ae.blur) ae.blur(); }   // un-focus the code editor
+function hexToRgb(h){ h=h.replace('#',''); return [parseInt(h.substr(0,2),16),parseInt(h.substr(2,2),16),parseInt(h.substr(4,2),16)]; }
+function curColor(){ return hexToRgb(document.getElementById('toolColor').value); }
+function setTool(t){ tool=t;
+  document.querySelectorAll('#screenToolbar [data-tool]').forEach(b=>b.classList.toggle('toggled', b.dataset.tool===t));
+  document.getElementById('screen').style.cursor = (t==='move')?'move':'crosshair';
+}
+function setFill(on){ fillShape=on; document.getElementById('fillToggle').classList.toggle('toggled',on); }
+
+/* --- parse onDraw's screen.draw* calls so Move and Eraser act on whole shapes --- */
+const SN='\\s*(-?\\d+(?:\\.\\d+)?)\\s*';
+const SHAPE_RE={
+  line:   new RegExp('screen\\.drawLine\\('+SN+','+SN+','+SN+','+SN+'\\)'),
+  rect:   new RegExp('screen\\.(drawRectF?)\\('+SN+','+SN+','+SN+','+SN+'\\)'),
+  circle: new RegExp('screen\\.(drawCircleF?)\\('+SN+','+SN+','+SN+'\\)'),
+  tri:    new RegExp('screen\\.(drawTriangleF?)\\('+SN+','+SN+','+SN+','+SN+','+SN+','+SN+'\\)'),
+  text:   new RegExp('screen\\.drawText\\('+SN+','+SN+',\\s*"((?:[^"\\\\]|\\\\.)*)"\\s*\\)')
+};
+function bbPts(pts){ const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]),x=Math.min(...xs),y=Math.min(...ys); return {x,y,w:Math.max(...xs)-x,h:Math.max(...ys)-y}; }
+function parseShapes(){
+  const lines=getCode().split('\n'), out=[]; let m;
+  for(let i=0;i<lines.length;i++){ const ln=lines[i];
+    if(m=ln.match(SHAPE_RE.line)){ const a=[+m[1],+m[2],+m[3],+m[4]]; out.push({line:i,type:'line',fn:'drawLine',nums:a,bbox:bbPts([[a[0],a[1]],[a[2],a[3]]])}); }
+    else if(m=ln.match(SHAPE_RE.rect)){ const a=[+m[2],+m[3],+m[4],+m[5]]; out.push({line:i,type:'rect',fn:m[1],nums:a,bbox:{x:a[0],y:a[1],w:a[2],h:a[3]}}); }
+    else if(m=ln.match(SHAPE_RE.circle)){ const a=[+m[2],+m[3],+m[4]]; out.push({line:i,type:'circle',fn:m[1],nums:a,bbox:{x:a[0]-a[2],y:a[1]-a[2],w:a[2]*2,h:a[2]*2}}); }
+    else if(m=ln.match(SHAPE_RE.tri)){ const a=[+m[2],+m[3],+m[4],+m[5],+m[6],+m[7]]; out.push({line:i,type:'tri',fn:m[1],nums:a,bbox:bbPts([[a[0],a[1]],[a[2],a[3]],[a[4],a[5]]])}); }
+    else if(m=ln.match(SHAPE_RE.text)){ const a=[+m[1],+m[2]]; out.push({line:i,type:'text',fn:'drawText',nums:a,text:m[3],bbox:{x:a[0],y:a[1],w:Math.max(4,m[3].length*4),h:5}}); }
+  }
+  return out;
+}
+function hitTest(px,py){ const s=parseShapes(); const PAD=2;   // generous grab area (esp. for thin text/lines)
+  for(let i=s.length-1;i>=0;i--){ const b=s[i].bbox;
+    if(px>=b.x-PAD && px<=b.x+b.w+PAD && py>=b.y-PAD && py<=b.y+b.h+PAD) return s[i]; } return null; }
+function shapeCall(sh,nums){ return sh.type==='text'
+  ? 'screen.drawText('+nums[0]+', '+nums[1]+', "'+sh.text+'")'
+  : 'screen.'+sh.fn+'('+nums.join(', ')+')'; }
+function shiftCoord(type,idx,v,dx,dy){
+  if(type==='rect'||type==='circle') return idx===0?v+dx : idx===1?v+dy : v;  // x,y then w/h/r unchanged
+  return (idx%2===0)? v+dx : v+dy;                                            // line/tri/text alternate x,y
+}
+
+function screenPixel(e){
+  const view=document.getElementById('screen'), rect=view.getBoundingClientRect(), zoom=getZoom();
+  return { x:Math.round((e.clientX-rect.left)/zoom - 0.5), y:Math.round((e.clientY-rect.top )/zoom - 0.5) };
+}
+function toolDown(e){
+  blurEditor();                                   // clicking the screen un-focuses the code editor
+  const p=screenPixel(e);
+  if(tool==='eyedropper'){ pickColour(p); return; }
+  if(tool==='eraser'){ const s=hitTest(p.x,p.y); if(s) deleteShape(s); else logLine('Eraser: no shape there.','info'); return; }
+  if(tool==='text'){ openTextPopup(e,p); return; }
+  if(tool==='move'){ const s=hitTest(p.x,p.y); moveTarget = s ? {s, orig:s.nums.slice(), start:p} : null;
+    if(!s) logLine('Move: click on a shape to grab it.','info'); return; }
+  dragStart=p; linePrev={x1:p.x,y1:p.y,x2:p.x,y2:p.y}; renderCanvas();
+}
+let moveRAF=null;
+function toolMove(e){
+  if(moveTarget){ const p=screenPixel(e), dx=p.x-moveTarget.start.x, dy=p.y-moveTarget.start.y, s=moveTarget.s;
+    const n=moveTarget.orig.map((v,idx)=>shiftCoord(s.type,idx,v,dx,dy));
+    const lines=getCode().split('\n'); const nl=lines[s.line].replace(SHAPE_RE[s.type], shapeCall(s,n));
+    if(nl!==lines[s.line]){ lines[s.line]=nl; setCode(lines.join('\n'));
+      if(!moveRAF) moveRAF=requestAnimationFrame(()=>{ moveRAF=null; liveReload(); }); }
+    return; }
+  if(!dragStart) return; const p=screenPixel(e); linePrev={x1:dragStart.x,y1:dragStart.y,x2:p.x,y2:p.y}; renderCanvas();
+}
+function toolUp(e){
+  if(moveTarget){ moveTarget=null; liveReload(); return; }
+  if(!dragStart) return;
+  const p=screenPixel(e), a=dragStart; dragStart=null; linePrev=null;
+  const noDrag = (a.x===p.x && a.y===p.y);
+  if(noDrag){ renderCanvas(); return; }          // ignore a non-drag for shapes
+  const f=fillShape?'F':'';
+  if(tool==='line')      insertDraw(['screen.drawLine('+a.x+', '+a.y+', '+p.x+', '+p.y+')']);
+  else if(tool==='rect'){ const x=Math.min(a.x,p.x),y=Math.min(a.y,p.y),w=Math.abs(p.x-a.x),h=Math.abs(p.y-a.y);
+    insertDraw(['screen.drawRect'+f+'('+x+', '+y+', '+w+', '+h+')']); }
+  else if(tool==='circle'){ const r=Math.round(Math.hypot(p.x-a.x,p.y-a.y));
+    insertDraw(['screen.drawCircle'+f+'('+a.x+', '+a.y+', '+r+')']); }
+  else if(tool==='triangle'){ const x1=Math.min(a.x,p.x),x2=Math.max(a.x,p.x),y1=Math.min(a.y,p.y),y2=Math.max(a.y,p.y),mx=Math.round((x1+x2)/2);
+    insertDraw(['screen.drawTriangle'+f+'('+x1+', '+y2+', '+mx+', '+y1+', '+x2+', '+y2+')']); }
+  renderCanvas();
+}
+/* --- current colour lives as a setColor in onDraw, updated the moment you pick --- */
+function setColorStmt(c){ return 'screen.setColor('+c[0]+', '+c[1]+', '+c[2]+')'; }
+function onDrawEndChar(code){               // char index of onDraw's matching 'end', or -1
+  const masked=maskLua(code), m=/function\s+onDraw\s*\(/.exec(masked); if(!m) return -1;
+  let depth=1; const kw=/\b(function|if|for|while|end)\b/g; kw.lastIndex=m.index+m[0].length; let t;
+  while((t=kw.exec(masked))){ if(t[1]==='end'){ depth--; if(depth===0) return t.index; } else depth++; }
+  return -1;
+}
+function lastOnDrawStmtLine(code){          // line index of the last statement inside onDraw, or -1
+  const ec=onDrawEndChar(code); if(ec<0) return -1;
+  const endLine=code.slice(0,ec).split('\n').length-1, lines=code.split('\n');
+  for(let i=endLine-1;i>=0;i--){ const t=lines[i].trim(); if(t==='') continue;
+    if(/function\s+onDraw\s*\(/.test(lines[i])) return -1; return i; }
+  return -1;
+}
+// Picking a colour writes it into the code right away (replacing a trailing setColor so it doesn't stack).
+function commitColor(){
+  const stmt=setColorStmt(curColor()); let code=getCode();
+  const li=lastOnDrawStmtLine(code), lines=code.split('\n');
+  if(li>=0 && /^\s*screen\.setColor\s*\(/.test(lines[li])){ lines[li]=lines[li].replace(/screen\.setColor\s*\([^)]*\)/, stmt); code=lines.join('\n'); }
+  else code=insertIntoFunction(code,'onDraw',stmt);
+  setCode(code); liveReload();
+}
+function insertDraw(stmts){
+  let code=getCode(); const stmt=setColorStmt(curColor());
+  const li=lastOnDrawStmtLine(code), lines=code.split('\n');
+  const trailingMatches = li>=0 && lines[li].trim()===stmt;   // colour already active? don't repeat it
+  if(!trailingMatches) code=insertIntoFunction(code,'onDraw',stmt);
+  for(const s of stmts) code=insertIntoFunction(code,'onDraw',s);
+  setCode(code); liveReload();
+}
+function deleteShape(s){                          // erase a whole shape = remove its code line (+ its paired setColor)
+  const lines=getCode().split('\n');
+  lines.splice(s.line,1);
+  if(s.line-1>=0 && /^\s*screen\.setColor\s*\(/.test(lines[s.line-1])) lines.splice(s.line-1,1);
+  setCode(lines.join('\n')); liveReload();
+}
+/* text: a small floating input near the click — no page-greying alert */
+function openTextPopup(e,p){
+  closeTextPopup();
+  const pop=document.createElement('div'); pop.id='textPop'; pop.className='textpop';
+  pop.innerHTML='<input type="text" placeholder="text…" spellcheck="false">';
+  document.body.appendChild(pop);
+  pop.style.left=Math.min(e.clientX, window.innerWidth-160)+'px';
+  pop.style.top=Math.min(e.clientY, window.innerHeight-50)+'px';
+  const inp=pop.querySelector('input'); setTimeout(()=>inp.focus(),0);
+  inp.addEventListener('keydown',ev=>{ ev.stopPropagation();
+    if(ev.key==='Enter'){ const t=inp.value; closeTextPopup(); if(t) insertText(p,t); }
+    else if(ev.key==='Escape'){ closeTextPopup(); } });
+  inp.addEventListener('blur',()=>setTimeout(closeTextPopup,120));
+}
+function closeTextPopup(){ const el=document.getElementById('textPop'); if(el) el.remove(); }
+function insertText(p,t){ t=t.replace(/\\/g,'\\\\').replace(/"/g,'\\"'); insertDraw(['screen.drawText('+p.x+', '+p.y+', "'+t+'")']); }
+function pickColour(p){
+  if(p.x<0||p.y<0||p.x>=Screen.W||p.y>=Screen.H) return;
+  const i=(p.y*Screen.W+p.x)*4, d=Screen.buf.data;
+  const hex='#'+[d[i],d[i+1],d[i+2]].map(v=>(v|0).toString(16).padStart(2,'0')).join('');
+  document.getElementById('toolColor').value=hex;
+  logLine('Picked colour '+hex,'info');
+  commitColor();                                   // write the picked colour into the code now
+}
+function doUndo(){ if(cm) cm.undo(); }
+function doRedo(){ if(cm) cm.redo(); }
+function copyCode(){ navigator.clipboard.writeText(getCode())
+  .then(()=>logLine('Code copied to clipboard.','info'), ()=>logLine('Copy failed — click the editor and press Ctrl+A then Ctrl+C.','err')); }
+
+function refreshOutputs(){
+  const nO=document.getElementById('numOutputs'), bO=document.getElementById('boolOutputs');
+  const nk=Object.keys(outputNumbers).sort((a,b)=>a-b);
+  const bk=Object.keys(outputBools).sort((a,b)=>a-b);
+  nO.innerHTML = nk.length? nk.map(c=>`<div class="out-row"><span>ch ${c}</span><span>${(+outputNumbers[c]).toFixed(3)}</span></div>`).join('') : '<div class="hint">nothing set yet</div>';
+  bO.innerHTML = bk.length? bk.map(c=>`<div class="out-row"><span>ch ${c}</span><span>${outputBools[c]?'true':'false'}</span></div>`).join('') : '<div class="hint">nothing set yet</div>';
+}
+
+/* ============================================================================
+   10. EXAMPLES / LESSONS
+============================================================================ */
+const EXAMPLES = {
+"0 · Blank (onTick + onDraw)":
+`-- Lua uses 'end' to close blocks — NOT curly braces { }.
+-- Put logic in onTick (runs 60x/sec), drawing in onDraw.
+
+function onTick()
+
+end
+
+function onDraw()
+
+end`,
+
+"1 · Hello + colour":
+`-- onDraw() runs every frame and is the ONLY place screen.* works.
+-- Colours are 0-255. A colour you set stays active until you change it.
+function onDraw()
+    screen.setColor(0, 255, 120)         -- r, g, b  (and optional alpha)
+    screen.drawText(2, 2, "Hello!")      -- x, y are the TOP-LEFT of the text
+    screen.setColor(255, 200, 0)
+    screen.drawText(2, 10, "channel ok")
+end`,
+
+"2 · Shapes":
+`-- F on the end means Filled. Without F you get just an outline.
+function onDraw()
+    local w, h = screen.getWidth(), screen.getHeight()
+
+    screen.setColor(30, 30, 40)
+    screen.drawRectF(0, 0, w, h)          -- background fill
+
+    screen.setColor(60, 160, 255)
+    screen.drawRect(2, 2, 24, 14)         -- outline rectangle (x, y, w, h)
+
+    screen.setColor(255, 90, 0)
+    screen.drawCircleF(46, 18, 9)         -- filled circle (cx, cy, radius)
+
+    screen.setColor(255, 255, 255)
+    screen.drawLine(0, h-1, w, 0)         -- a line across the screen
+end`,
+
+"3 · Read an input → bar":
+`-- input.getNumber(channel) reads a number coming INTO the chip.
+-- Channels are 1..32. Drag the N1 slider on the right and watch it move.
+function onDraw()
+    local v = input.getNumber(1)          -- try a value 0..1
+    local w, h = screen.getWidth(), screen.getHeight()
+
+    screen.setColor(50, 50, 50)
+    screen.drawRectF(0, h/2-3, w, 6)       -- the track
+    screen.setColor(0, 255, 120)
+    screen.drawRectF(0, h/2-3, w * v, 6)   -- fill width scaled by the input
+end`,
+
+"4 · map(): the gauge workhorse":
+`-- The single most useful helper: remap a value from one range to another.
+-- Here: input 0..1  ->  speed 0..200, and  ->  a bar height.
+function map(x, inMin, inMax, outMin, outMax)
+    return outMin + (x - inMin) * (outMax - outMin) / (inMax - inMin)
+end
+
+speed = 0   -- a GLOBAL variable keeps its value between ticks
+
+function onTick()
+    -- onTick() runs 60x per second. Put logic/maths here.
+    speed = input.getNumber(1)
+end
+
+function onDraw()
+    local w, h = screen.getWidth(), screen.getHeight()
+    local kmh  = map(speed, 0, 1, 0, 200)
+    local barH = map(speed, 0, 1, 0, h)
+
+    screen.setColor(0, 200, 255)
+    screen.drawRectF(0, h - barH, w, barH)        -- grows from the bottom
+    screen.setColor(255, 255, 255)
+    screen.drawText(2, 2, math.floor(kmh) .. " kmh")  -- '..' joins strings
+end`,
+
+"5 · Spinning needle":
+`-- A needle is just a line from a centre point, rotated by an angle.
+-- math.sin / math.cos use RADIANS. math.rad() converts degrees -> radians.
+function map(x,a,b,c,d) return c + (x-a)*(d-c)/(b-a) end
+
+function onDraw()
+    local cx, cy = screen.getWidth()/2, screen.getHeight()/2
+    local r = math.min(cx, cy) - 2
+    local t = input.getNumber(1)                         -- 0..1
+
+    -- sweep the needle from -120° to +120°, like a real gauge:
+    local angle = map(t, 0, 1, math.rad(-120), math.rad(120))
+
+    -- screen Y grows DOWNWARD, and we want 0 to point straight up,
+    -- so: x uses sin, y uses -cos.
+    local ex = cx + math.sin(angle) * r
+    local ey = cy - math.cos(angle) * r
+
+    screen.setColor(70, 70, 80)
+    screen.drawCircle(cx, cy, r)
+    screen.setColor(255, 60, 60)
+    screen.drawLine(cx, cy, ex, ey)
+end`,
+
+"6 · Full gauge w/ ticks":
+`function map(x,a,b,c,d) return c + (x-a)*(d-c)/(b-a) end
+
+function onDraw()
+    local cx, cy = screen.getWidth()/2, screen.getHeight()-2
+    local r = math.min(screen.getWidth()/2, screen.getHeight()) - 4
+    local t = input.getNumber(1)                  -- 0..1
+
+    -- tick marks every 10% across a 180° sweep
+    for i = 0, 10 do
+        local a = map(i/10, 0, 1, math.rad(-90), math.rad(90))
+        local x1 = cx + math.sin(a) * r
+        local y1 = cy - math.cos(a) * r
+        local x2 = cx + math.sin(a) * (r-3)
+        local y2 = cy - math.cos(a) * (r-3)
+        screen.setColor(120,120,130)
+        screen.drawLine(x1, y1, x2, y2)
+    end
+
+    -- the needle
+    local a = map(t, 0, 1, math.rad(-90), math.rad(90))
+    screen.setColor(255, 80, 40)
+    screen.drawLine(cx, cy, cx + math.sin(a)*(r-4), cy - math.cos(a)*(r-4))
+
+    screen.setColor(255,255,255)
+    screen.drawText(2, 2, math.floor(t*100) .. "%")
+end`,
+
+"7 · Outputs (throttle)":
+`-- Read a button + a dial, send a throttle value OUT to other components.
+-- output.setNumber(channel, value) — watch the Outputs tab on the right.
+-- Turn on B1 (the button) and drag N1 (target throttle 0..1).
+throttle = 0
+
+function onTick()
+    local on     = input.getBool(1)        -- a button / toggle
+    local target = input.getNumber(1)      -- desired throttle 0..1
+    if on then
+        throttle = throttle + (target - throttle) * 0.05   -- ease toward target
+    else
+        throttle = throttle * 0.95                          -- spin down
+    end
+    output.setNumber(1, throttle)          -- send throttle out on channel 1
+    output.setBool(1, throttle > 0.5)      -- e.g. a "running" lamp on channel 1
+end
+
+function onDraw()
+    local h = screen.getHeight()
+    screen.setColor(0, 255, 120)
+    screen.drawRectF(2, h*(1-throttle), 8, h*throttle)
+    screen.setColor(255,255,255)
+    screen.drawText(14, 2, math.floor(throttle*100) .. "%")
+end`,
+
+"8 · Animate with no input":
+`-- You can animate using a tick counter even with nothing plugged in.
+t = 0
+function onTick() t = t + 1 end
+
+function onDraw()
+    local cx, cy = screen.getWidth()/2, screen.getHeight()/2
+    local a = t * 0.05
+    screen.setColor(255, 230, 0)
+    screen.drawLine(cx, cy, cx + math.cos(a)*12, cy + math.sin(a)*12)
+
+    -- blink text once per second (60 ticks): % is the remainder operator
+    if t % 60 < 30 then
+        screen.setColor(255, 60, 60)
+        screen.drawText(2, 2, "BLINK")
+    end
+end`,
+
+"9 · drawTextBox alignment":
+`-- drawTextBox(x, y, w, h, text, hAlign, vAlign)
+-- align: -1 = top/left, 0 = centre, 1 = bottom/right. It word-wraps for you.
+function onDraw()
+    local w, h = screen.getWidth(), screen.getHeight()
+    screen.setColor(40,40,50); screen.drawRect(0,0,w,h)
+    screen.setColor(120,220,255)
+    screen.drawTextBox(0, 0, w, h, "Wrapped, centered text inside the box", 0, 0)
+end`,
+};
+function buildExampleList(){
+  const sel=document.getElementById('exampleSel');
+  for(const name in EXAMPLES){ const o=document.createElement('option'); o.value=name; o.textContent=name; sel.appendChild(o); }
+}
+
+/* ============================================================================
+   11. DOCS + LUA NOTES content
+============================================================================ */
+document.getElementById('tab-docs').innerHTML = `
+  <h3>Lifecycle</h3>
+  <div class="fn"><b>onTick()</b> — runs 60×/second. Put logic, maths, reading inputs and setting outputs here.</div>
+  <div class="fn"><b>onDraw()</b> — runs each frame. The <i>only</i> place <code>screen.*</code> works. The screen is wiped to black before it runs.</div>
+  <h3>screen — drawing</h3>
+  <div class="fn"><b>screen.getWidth() / getHeight()</b> → monitor size in pixels.</div>
+  <div class="fn"><b>screen.setColor(r,g,b[,a])</b> — 0-255. Stays set until changed.</div>
+  <div class="fn"><b>screen.drawClear()</b> — fill the whole screen with the current colour.</div>
+  <div class="fn"><b>screen.drawText(x,y,text)</b> — x,y = top-left. ~4px per char, 5px tall.</div>
+  <div class="fn"><b>screen.drawTextBox(x,y,w,h,text,hAlign,vAlign)</b> — wrapped + aligned (-1/0/1).</div>
+  <div class="fn"><b>screen.drawRect / drawRectF (x,y,w,h)</b> — outline / filled.</div>
+  <div class="fn"><b>screen.drawCircle / drawCircleF (x,y,r)</b> — outline / filled.</div>
+  <div class="fn"><b>screen.drawLine(x1,y1,x2,y2)</b></div>
+  <div class="fn"><b>screen.drawTriangle / drawTriangleF (x1,y1,x2,y2,x3,y3)</b></div>
+  <h3>input — signals coming in</h3>
+  <div class="fn"><b>input.getNumber(channel)</b> → number on channel 1-32.</div>
+  <div class="fn"><b>input.getBool(channel)</b> → true/false on channel 1-32.</div>
+  <h3>output — signals going out</h3>
+  <div class="fn"><b>output.setNumber(channel, value)</b></div>
+  <div class="fn"><b>output.setBool(channel, value)</b></div>
+  <p style="margin-top:12px">Note: <code>screen.drawMap</code>, <code>property.*</code> and map colours exist as stubs so map/property scripts don't crash — but maps aren't rendered in this simulator.</p>
+`;
+document.getElementById('tab-notes').innerHTML = `
+  <h3>The mental model</h3>
+  <ul>
+    <li>A microcontroller calls your <b>onTick()</b> 60×/sec, then <b>onDraw()</b> to paint the monitor.</li>
+    <li><b>Globals persist</b> between ticks — use them for state (a speed, a counter). <b>local</b> variables vanish at the end of each call.</li>
+    <li>Always <b>initialise globals</b> (e.g. <code>speed = 0</code>). Doing maths on an uninitialised (nil) value is the #1 beginner error.</li>
+  </ul>
+  <h3>Lua quirks vs. other languages</h3>
+  <ul>
+    <li>Indexes start at <b>1</b>, not 0. Input channels are <b>1-32</b>.</li>
+    <li>Join strings with <code>..</code> not <code>+</code> → <code>"v=" .. value</code>.</li>
+    <li><b>not-equal</b> is <code>~=</code>. Logic words are <code>and / or / not</code>.</li>
+    <li>No <code>++</code>. Write <code>x = x + 1</code>.</li>
+    <li>Comments are <code>--</code> (line) and <code>--[[ ... ]]</code> (block).</li>
+    <li>Only <code>nil</code> and <code>false</code> are falsy. <b>0 is true!</b></li>
+    <li><code>if cond then ... elseif ... else ... end</code> — blocks close with <code>end</code>.</li>
+    <li>Loops: <code>for i = 1, 10 do ... end</code> (inclusive). <code>while cond do ... end</code>.</li>
+  </ul>
+  <h3>Maths you'll keep using</h3>
+  <ul>
+    <li><code>math.sin / cos</code> take <b>radians</b>. <code>math.rad(deg)</code>, <code>math.deg(rad)</code>, <code>math.pi</code>.</li>
+    <li><code>math.floor / ceil / abs / min / max / sqrt</code>, <code>math.random()</code>.</li>
+    <li><code>%</code> is remainder — great for "every N ticks" timing.</li>
+    <li>The <b>map()</b> helper (Example 4) converts any range to any other — the heart of every gauge, bar and needle.</li>
+  </ul>
+`;
+
+/* ============================================================================
+   12. WIRE UP
+============================================================================ */
+function applySize(){
+  const [w,h]=document.getElementById('sizeSel').value.split('x').map(Number);
+  Screen.setSize(w,h);
+  Screen.clear(0,0,0);
+  renderCanvas();
+  if(codeLoaded) reset();       // recompile & resume live at the new resolution
+}
+
+window.addEventListener('load', ()=>{
+  Screen.attach(document.getElementById('screen'));
+  initEditor();
+  buildExampleList();
+  buildInputUI();
+  applySize();
+  if(window.lucide) lucide.createIcons();   // render the toolbar icons
+
+  // load the blank template by default
+  setCode(EXAMPLES["0 · Blank (onTick + onDraw)"]);
+  document.getElementById('exampleSel').value="0 · Blank (onTick + onDraw)";
+  syncChannelsFromCode();
+  setTool('move');
+
+  // keep the Inputs panel mirrored to the code AND recompile live as you type (debounced)
+  let syncTimer=null;
+  const onEdit=()=>{ clearTimeout(syncTimer); syncTimer=setTimeout(()=>{ syncChannelsFromCode(); liveReload(); }, 350); };
+  if(cm) cm.on('change', onEdit); else document.getElementById('editor').addEventListener('input', onEdit);
+
+  // controls
+  document.getElementById('stepBtn').addEventListener('click', step);
+  document.getElementById('resetBtn').addEventListener('click', reset);
+  document.getElementById('sizeSel').addEventListener('change', applySize);
+  document.getElementById('zoomSel').addEventListener('change', ()=>{ renderCanvas(); });
+  document.getElementById('exampleSel').addEventListener('change', e=>{ const n=e.target.value; if(EXAMPLES[n]){ stopLoop(); setCode(EXAMPLES[n]); syncChannelsFromCode(); reset(); logLine('Loaded "'+n+'".','info'); } });
+
+  // dynamic add-input buttons
+  document.getElementById('addNum').addEventListener('click', addNumInput);
+  document.getElementById('addBool').addEventListener('click', addBoolInput);
+
+  // copy button
+  document.getElementById('copyBtn').addEventListener('click', copyCode);
+
+  // tool palette
+  document.querySelectorAll('#screenToolbar [data-tool]').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
+  document.getElementById('fillToggle').addEventListener('click', ()=>setFill(!fillShape));
+  document.getElementById('toolColor').addEventListener('change', commitColor);   // picking a colour writes it to code now
+  document.getElementById('undoBtn').addEventListener('click', doUndo);
+  document.getElementById('redoBtn').addEventListener('click', doRedo);
+  document.getElementById('gridChk').addEventListener('change', e=>{ gridOn=e.target.checked; renderCanvas(); });
+  const sc=document.getElementById('screen');
+  sc.addEventListener('mousedown', e=>{ e.preventDefault(); toolDown(e); });
+  window.addEventListener('mousemove', e=>{ if(dragStart||moveTarget) toolMove(e); });
+  window.addEventListener('mouseup', e=>{ if(dragStart||moveTarget) toolUp(e); });
+
+  // keyboard shortcuts (Photoshop-style), ignored while typing in the editor / inputs
+  window.addEventListener('keydown', e=>{
+    const ae=document.activeElement, typing = ae && (/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) || ae.isContentEditable);
+    if(e.ctrlKey||e.metaKey){
+      const k=e.key.toLowerCase();
+      if(k==='z' && !typing){ e.preventDefault(); e.shiftKey?doRedo():doUndo(); }
+      else if(k==='y' && !typing){ e.preventDefault(); doRedo(); }
+      return;
+    }
+    if(e.altKey || typing) return;
+    const map={v:'move',l:'line',r:'rect',c:'circle',y:'triangle',t:'text',i:'eyedropper',e:'eraser'};
+    const k=e.key.toLowerCase();
+    if(map[k]){ setTool(map[k]); e.preventDefault(); }
+    else if(k==='f'){ setFill(!fillShape); e.preventDefault(); }
+  });
+
+  // tabs
+  document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('#tabs button').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.tabpane').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active'); document.getElementById('tab-'+b.dataset.tab).classList.add('active');
+  }));
+
+  window.addEventListener('resize', ()=>{ if(document.getElementById('zoomSel').value==='0') renderCanvas(); });
+
+  // start running live
+  if(!fengariReady){
+    logLine("⚠ Lua engine (Fengari) didn't load — you're probably offline.",'err');
+    logLine("Connect to the internet once and reload; the browser caches it for offline use afterward.",'info');
+  } else {
+    reset();   // compile the default example and run it live
+    logLine("Running live — edits apply automatically. Step to freeze a frame, Reset to restart.",'info');
+  }
+});
+</script>
+</body>
+</html>
