@@ -90,7 +90,7 @@
   .screen-toolbar button.toggled{background:var(--accent2); color:#04141f; border-color:var(--accent2); font-weight:600}
   .screen-toolbar [data-tool]{width:30px; display:inline-flex; align-items:center; justify-content:center; padding:5px 0}
   .screen-toolbar svg, .editor-bar svg{width:15px; height:15px; stroke-width:2}
-  #copyBtn{display:inline-flex; align-items:center; gap:5px}
+  #copyBtn,#copyCompactBtn{display:inline-flex; align-items:center; gap:5px}
   #fillToggle{display:inline-flex; align-items:center; padding:5px 7px}
   .screen-toolbar select{padding:4px 6px; font-size:12px}
   .screen-area{
@@ -173,6 +173,7 @@
       <label class="lbl">Examples</label>
       <select id="exampleSel"></select>
       <button id="copyBtn" title="Copy all code to clipboard"><i data-lucide="copy"></i> Copy</button>
+      <button id="copyCompactBtn" title="Copy minified for the 4096-char limit: strips comments/whitespace and aliases repeated screen/input/math calls (e.g. a=screen.setColor). Strings are left intact."><i data-lucide="scissors"></i> Compact</button>
     </div>
     <div class="editor-wrap">
       <textarea id="editor" spellcheck="false"></textarea>
@@ -191,6 +192,7 @@
           <option value="96x96">3x3 — 96×96</option>
           <option value="160x96">5x3 — 160×96</option>
           <option value="288x160">9x5 — 288×160</option>
+          <option value="256x192">HMD — 256×192</option>
         </select>
         <span class="sep"></span>
         <button data-tool="move" title="Move (V)"><i data-lucide="move"></i></button>
@@ -258,106 +260,79 @@
    1. PIXEL FONT  (Stormworks-style 3x5 glyphs, 4px advance, 6px line height)
    Each glyph = 5 rows of 3 columns. '1' = lit pixel.
 ============================================================================ */
-const FONT = (function(){
+const FONT = (function(){            // 4px-wide glyphs (chunky, like the in-game font); 5px advance
   const g = {};
   const def = (ch, rows) => { g[ch] = rows; };
-  def(' ',["000","000","000","000","000"]);
+  def(' ',["0000","0000","0000","0000","0000"]);
   // digits
-  def('0',["111","101","101","101","111"]);
-  def('1',["010","110","010","010","111"]);
-  def('2',["111","001","111","100","111"]);
-  def('3',["111","001","111","001","111"]);
-  def('4',["101","101","111","001","001"]);
-  def('5',["111","100","111","001","111"]);
-  def('6',["111","100","111","101","111"]);
-  def('7',["111","001","010","010","010"]);
-  def('8',["111","101","111","101","111"]);
-  def('9',["111","101","111","001","111"]);
+  def('0',["0110","1001","1001","1001","0110"]);
+  def('1',["0010","0110","0010","0010","0111"]);
+  def('2',["0110","1001","0010","0100","1111"]);
+  def('3',["1110","0001","0110","0001","1110"]);
+  def('4',["1001","1001","1111","0001","0001"]);
+  def('5',["1111","1000","1110","0001","1110"]);
+  def('6',["0110","1000","1110","1001","0110"]);
+  def('7',["1111","0001","0010","0100","0100"]);
+  def('8',["0110","1001","0110","1001","0110"]);
+  def('9',["0110","1001","0111","0001","0110"]);
   // uppercase
-  def('A',["111","101","111","101","101"]);
-  def('B',["110","101","110","101","110"]);
-  def('C',["111","100","100","100","111"]);
-  def('D',["110","101","101","101","110"]);
-  def('E',["111","100","111","100","111"]);
-  def('F',["111","100","111","100","100"]);
-  def('G',["111","100","101","101","111"]);
-  def('H',["101","101","111","101","101"]);
-  def('I',["111","010","010","010","111"]);
-  def('J',["001","001","001","101","111"]);
-  def('K',["101","101","110","101","101"]);
-  def('L',["100","100","100","100","111"]);
-  def('M',["101","111","111","101","101"]);
-  def('N',["101","111","111","111","101"]);
-  def('O',["111","101","101","101","111"]);
-  def('P',["111","101","111","100","100"]);
-  def('Q',["111","101","101","111","011"]);
-  def('R',["111","101","110","101","101"]);
-  def('S',["111","100","111","001","111"]);
-  def('T',["111","010","010","010","010"]);
-  def('U',["101","101","101","101","111"]);
-  def('V',["101","101","101","101","010"]);
-  def('W',["101","101","111","111","101"]);
-  def('X',["101","101","010","101","101"]);
-  def('Y',["101","101","010","010","010"]);
-  def('Z',["111","001","010","100","111"]);
-  // lowercase
-  def('a',["000","011","101","101","011"]);
-  def('b',["100","100","110","101","110"]);
-  def('c',["000","011","100","100","011"]);
-  def('d',["001","001","011","101","011"]);
-  def('e',["000","010","101","110","011"]);
-  def('f',["001","010","111","010","010"]);
-  def('g',["000","011","101","011","110"]);
-  def('h',["100","100","110","101","101"]);
-  def('i',["010","000","010","010","010"]);
-  def('j',["010","000","010","010","110"]);
-  def('k',["100","101","110","110","101"]);
-  def('l',["110","010","010","010","011"]);
-  def('m',["000","101","111","111","101"]);
-  def('n',["000","110","101","101","101"]);
-  def('o',["000","010","101","101","010"]);
-  def('p',["000","110","101","110","100"]);
-  def('q',["000","011","101","011","001"]);
-  def('r',["000","011","100","100","100"]);
-  def('s',["000","011","110","011","110"]);
-  def('t',["010","111","010","010","011"]);
-  def('u',["000","101","101","101","011"]);
-  def('v',["000","101","101","101","010"]);
-  def('w',["000","101","111","111","101"]);
-  def('x',["000","101","010","010","101"]);
-  def('y',["000","101","101","011","110"]);
-  def('z',["000","111","001","010","111"]);
-  // punctuation
-  def('.',["000","000","000","000","010"]);
-  def(',',["000","000","000","010","100"]);
-  def(':',["000","010","000","010","000"]);
-  def(';',["000","010","000","010","100"]);
-  def('!',["010","010","010","000","010"]);
-  def('?',["111","001","011","000","010"]);
-  def("'",["010","010","000","000","000"]);
-  def('"',["101","101","000","000","000"]);
-  def('-',["000","000","111","000","000"]);
-  def('+',["000","010","111","010","000"]);
-  def('=',["000","111","000","111","000"]);
-  def('*',["000","101","010","101","000"]);
-  def('/',["001","001","010","100","100"]);
-  def('\\',["100","100","010","001","001"]);
-  def('%',["101","001","010","100","101"]);
-  def('(',["001","010","010","010","001"]);
-  def(')',["100","010","010","010","100"]);
-  def('[',["011","010","010","010","011"]);
-  def(']',["110","010","010","010","110"]);
-  def('<',["001","010","100","010","001"]);
-  def('>',["100","010","001","010","100"]);
-  def('_',["000","000","000","000","111"]);
-  def('|',["010","010","010","010","010"]);
-  def('#',["101","111","101","111","101"]);
-  def('&',["010","101","010","101","011"]);
-  def('@',["111","101","111","100","111"]);
-  def('$',["011","110","011","110","010"]);
-  def('°',["111","101","111","000","000"]);
-  def('^',["010","101","000","000","000"]);
-  def('~',["000","000","011","110","000"]);
+  def('A',["0110","1001","1111","1001","1001"]);
+  def('B',["1110","1001","1110","1001","1110"]);
+  def('C',["0111","1000","1000","1000","0111"]);
+  def('D',["1110","1001","1001","1001","1110"]);
+  def('E',["1111","1000","1110","1000","1111"]);
+  def('F',["1111","1000","1110","1000","1000"]);
+  def('G',["0111","1000","1011","1001","0111"]);
+  def('H',["1001","1001","1111","1001","1001"]);
+  def('I',["1110","0100","0100","0100","1110"]);
+  def('J',["0011","0001","0001","1001","0110"]);
+  def('K',["1001","1010","1100","1010","1001"]);
+  def('L',["1000","1000","1000","1000","1111"]);
+  def('M',["1001","1111","1111","1001","1001"]);
+  def('N',["1001","1101","1011","1001","1001"]);
+  def('O',["0110","1001","1001","1001","0110"]);
+  def('P',["1110","1001","1110","1000","1000"]);
+  def('Q',["0110","1001","1001","1011","0111"]);
+  def('R',["1110","1001","1110","1010","1001"]);
+  def('S',["0111","1000","0110","0001","1110"]);
+  def('T',["1111","0100","0100","0100","0100"]);
+  def('U',["1001","1001","1001","1001","0110"]);
+  def('V',["1001","1001","1001","0110","0100"]);
+  def('W',["1001","1001","1111","1111","1001"]);
+  def('X',["1001","1001","0110","1001","1001"]);
+  def('Y',["1001","1001","0110","0100","0100"]);
+  def('Z',["1111","0001","0110","1000","1111"]);
+  // punctuation (text is auto-uppercased, so no lowercase glyphs needed)
+  def('.',["0000","0000","0000","0000","0100"]);
+  def(',',["0000","0000","0000","0100","1000"]);
+  def(':',["0000","0100","0000","0100","0000"]);
+  def(';',["0000","0100","0000","0100","1000"]);
+  def('!',["0100","0100","0100","0000","0100"]);
+  def('?',["0110","1001","0010","0000","0100"]);
+  def("'",["0100","0100","0000","0000","0000"]);
+  def('"',["1010","1010","0000","0000","0000"]);
+  def('-',["0000","0000","1110","0000","0000"]);
+  def('+',["0000","0100","1110","0100","0000"]);
+  def('=',["0000","1110","0000","1110","0000"]);
+  def('*',["0000","1010","0100","1010","0000"]);
+  def('/',["0001","0010","0100","1000","0000"]);
+  def('\\',["1000","0100","0010","0001","0000"]);
+  def('%',["1001","0010","0100","1001","0000"]);
+  def('(',["0010","0100","0100","0100","0010"]);
+  def(')',["0100","0010","0010","0010","0100"]);
+  def('[',["0110","0100","0100","0100","0110"]);
+  def(']',["0110","0010","0010","0010","0110"]);
+  def('<',["0010","0100","1000","0100","0010"]);
+  def('>',["1000","0100","0010","0100","1000"]);
+  def('_',["0000","0000","0000","0000","1111"]);
+  def('|',["0100","0100","0100","0100","0100"]);
+  def('#',["1010","1111","1010","1111","1010"]);
+  def('&',["0110","1000","0110","1001","0111"]);
+  def('@',["0110","1011","1011","1000","0110"]);
+  def('$',["0111","1010","0110","0101","1110"]);
+  def('°',["0110","1001","0110","0000","0000"]);
+  def('^',["0100","1010","0000","0000","0000"]);
+  def('~',["0000","0000","0101","1010","0000"]);
   return g;
 })();
 
@@ -419,19 +394,19 @@ const Screen = {
       const w2=((x1-x3)*(y-y3)-(y1-y3)*(x-x3));
       if((w0>=0&&w1>=0&&w2>=0)||(w0<=0&&w1<=0&&w2<=0)) this.px(x,y);
     } },
-  glyph(gx,gy,rows){ for(let r=0;r<5;r++){ const row=rows[r]; for(let c=0;c<3;c++) if(row[c]==='1') this.px(gx+c,gy+r); } },
+  glyph(gx,gy,rows){ for(let r=0;r<5;r++){ const row=rows[r]; for(let c=0;c<4;c++) if(row[c]==='1') this.px(gx+c,gy+r); } },
   text(x,y,str){
     x=Math.floor(x); y=Math.floor(y); let cx=x;
     for(const ch of String(str).toUpperCase()){   // Stormworks renders text in CAPITALS
       if(ch==='\n'){ y+=6; cx=x; continue; }
       const rows = FONT[ch] || FONT['?'];
-      this.glyph(cx,y,rows); cx+=4;
+      this.glyph(cx,y,rows); cx+=5;                // Stormworks advances 5px per character
     } },
-  textWidth(str){ let max=0,cur=0; for(const ch of String(str)){ if(ch==='\n'){max=Math.max(max,cur);cur=0;} else cur+=4; } return Math.max(max,cur); },
+  textWidth(str){ let max=0,cur=0; for(const ch of String(str)){ if(ch==='\n'){max=Math.max(max,cur);cur=0;} else cur+=5; } return Math.max(max,cur); },
   textBox(x,y,w,h,str,halign,valign){
-    // word-wrap to width w (4px per char), then align inside the box
+    // word-wrap to width w (5px per char), then align inside the box
     halign=halign||0; valign=valign||0;
-    const maxChars=Math.max(1,Math.floor(w/4));
+    const maxChars=Math.max(1,Math.floor(w/5));
     const words=String(str).split(/(\s+)/), lines=[]; let line="";
     const pushWord=(word)=>{
       if(word==="") return;
@@ -447,7 +422,7 @@ const Screen = {
     const lh=6, total=lines.length*lh;
     let ty = y + (valign<0?0 : valign>0? (h-total) : Math.floor((h-total)/2));
     for(const ln of lines){
-      const lw=ln.length*4;
+      const lw=ln.length*5;
       let tx = x + (halign<0?0 : halign>0? (w-lw) : Math.floor((w-lw)/2));
       this.text(tx,ty,ln); ty+=lh;
     }
@@ -882,7 +857,7 @@ const SHAPE_RE={
   rect:   new RegExp('screen\\.(drawRectF?)\\('+SN+','+SN+','+SN+','+SN+'\\)'),
   circle: new RegExp('screen\\.(drawCircleF?)\\('+SN+','+SN+','+SN+'\\)'),
   tri:    new RegExp('screen\\.(drawTriangleF?)\\('+SN+','+SN+','+SN+','+SN+','+SN+','+SN+'\\)'),
-  text:   new RegExp('screen\\.drawText\\('+SN+','+SN+',\\s*"((?:[^"\\\\]|\\\\.)*)"\\s*\\)')
+  text:   new RegExp('screen\\.drawText\\('+SN+','+SN+',\\s*(.+)\\)')   // x,y must be literals; text arg can be anything
 };
 function bbPts(pts){ const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]),x=Math.min(...xs),y=Math.min(...ys); return {x,y,w:Math.max(...xs)-x,h:Math.max(...ys)-y}; }
 function parseShapes(){
@@ -892,7 +867,11 @@ function parseShapes(){
     else if(m=ln.match(SHAPE_RE.rect)){ const a=[+m[2],+m[3],+m[4],+m[5]]; out.push({line:i,type:'rect',fn:m[1],nums:a,bbox:{x:a[0],y:a[1],w:a[2],h:a[3]}}); }
     else if(m=ln.match(SHAPE_RE.circle)){ const a=[+m[2],+m[3],+m[4]]; out.push({line:i,type:'circle',fn:m[1],nums:a,bbox:{x:a[0]-a[2],y:a[1]-a[2],w:a[2]*2,h:a[2]*2}}); }
     else if(m=ln.match(SHAPE_RE.tri)){ const a=[+m[2],+m[3],+m[4],+m[5],+m[6],+m[7]]; out.push({line:i,type:'tri',fn:m[1],nums:a,bbox:bbPts([[a[0],a[1]],[a[2],a[3]],[a[4],a[5]]])}); }
-    else if(m=ln.match(SHAPE_RE.text)){ const a=[+m[1],+m[2]]; out.push({line:i,type:'text',fn:'drawText',nums:a,text:m[3],bbox:{x:a[0],y:a[1],w:Math.max(4,m[3].length*4),h:5}}); }
+    else if(m=ln.match(SHAPE_RE.text)){ const a=[+m[1],+m[2]], arg=m[3].trim();
+      const lit=(arg.match(/"((?:[^"\\]|\\.)*)"/g)||[]).join('').replace(/"/g,'');   // text from any quoted parts
+      const dyn=/\.\./.test(arg) || !/^"(?:[^"\\]|\\.)*"$/.test(arg);                 // concatenation / non-literal?
+      const chars=Math.max(2, lit.length + (dyn?6:0));                                // estimate width for the grab box
+      out.push({line:i,type:'text',fn:'drawText',nums:a,text:arg,bbox:{x:a[0],y:a[1],w:chars*5,h:5}}); }
   }
   return out;
 }
@@ -900,7 +879,7 @@ function hitTest(px,py){ const s=parseShapes(); const PAD=2;   // generous grab 
   for(let i=s.length-1;i>=0;i--){ const b=s[i].bbox;
     if(px>=b.x-PAD && px<=b.x+b.w+PAD && py>=b.y-PAD && py<=b.y+b.h+PAD) return s[i]; } return null; }
 function shapeCall(sh,nums){ return sh.type==='text'
-  ? 'screen.drawText('+nums[0]+', '+nums[1]+', "'+sh.text+'")'
+  ? 'screen.drawText('+nums[0]+', '+nums[1]+', '+sh.text+')'   // keep the original text arg verbatim
   : 'screen.'+sh.fn+'('+nums.join(', ')+')'; }
 function shiftCoord(type,idx,v,dx,dy){
   if(type==='rect'||type==='circle') return idx===0?v+dx : idx===1?v+dy : v;  // x,y then w/h/r unchanged
@@ -925,7 +904,7 @@ let moveRAF=null;
 function toolMove(e){
   if(moveTarget){ const p=screenPixel(e), dx=p.x-moveTarget.start.x, dy=p.y-moveTarget.start.y, s=moveTarget.s;
     const n=moveTarget.orig.map((v,idx)=>shiftCoord(s.type,idx,v,dx,dy));
-    const lines=getCode().split('\n'); const nl=lines[s.line].replace(SHAPE_RE[s.type], shapeCall(s,n));
+    const lines=getCode().split('\n'); const nl=lines[s.line].replace(SHAPE_RE[s.type], ()=>shapeCall(s,n));
     if(nl!==lines[s.line]){ lines[s.line]=nl; setCode(lines.join('\n'));
       if(!moveRAF) moveRAF=requestAnimationFrame(()=>{ moveRAF=null; liveReload(); }); }
     return; }
@@ -970,11 +949,18 @@ function commitColor(){
   else code=insertIntoFunction(code,'onDraw',stmt);
   setCode(code); liveReload();
 }
+// "r, g, b" of the LAST setColor anywhere inside onDraw (the active colour), or null. Ignores setColor inside strings.
+function lastOnDrawColor(code){
+  const ec=onDrawEndChar(code); if(ec<0) return null;
+  const masked=maskLua(code), m=/function\s+onDraw\s*\(/.exec(masked); if(!m) return null;
+  const body=masked.slice(m.index, ec);
+  const re=/screen\.setColor\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/g; let mm, last=null;
+  while((mm=re.exec(body))) last=mm[1]+', '+mm[2]+', '+mm[3];
+  return last;
+}
 function insertDraw(stmts){
-  let code=getCode(); const stmt=setColorStmt(curColor());
-  const li=lastOnDrawStmtLine(code), lines=code.split('\n');
-  const trailingMatches = li>=0 && lines[li].trim()===stmt;   // colour already active? don't repeat it
-  if(!trailingMatches) code=insertIntoFunction(code,'onDraw',stmt);
+  let code=getCode(); const c=curColor(), colStr=c[0]+', '+c[1]+', '+c[2];
+  if(lastOnDrawColor(code)!==colStr) code=insertIntoFunction(code,'onDraw',setColorStmt(c));  // only add setColor when the colour actually changed
   for(const s of stmts) code=insertIntoFunction(code,'onDraw',s);
   setCode(code); liveReload();
 }
@@ -1012,6 +998,58 @@ function doUndo(){ if(cm) cm.undo(); }
 function doRedo(){ if(cm) cm.redo(); }
 function copyCode(){ navigator.clipboard.writeText(getCode())
   .then(()=>logLine('Code copied to clipboard.','info'), ()=>logLine('Copy failed — click the editor and press Ctrl+A then Ctrl+C.','err')); }
+// Safe compactor for the 4096-char limit: strips comments + extra whitespace, never touches string contents.
+function compactLua(code){
+  let out='', i=0, n=code.length;
+  const pushSpace=()=>{ const last=out[out.length-1]; if(out.length && last!==' ' && last!=='\n') out+=' '; };
+  while(i<n){
+    const c=code[i], d=code[i+1];
+    if(c==='['){ const m=/^\[(=*)\[/.exec(code.slice(i,i+20));   // long string [[ ]] / [=[ ]=] — keep verbatim
+      if(m){ const close=']'+m[1]+']'; let end=code.indexOf(close,i+m[0].length); end=end<0?n:end+close.length; out+=code.slice(i,end); i=end; continue; } }
+    if(c==='"'||c==="'"){ out+=c; i++; while(i<n){ const ch=code[i]; out+=ch; i++; if(ch==='\\'){ if(i<n){out+=code[i];i++;} continue;} if(ch===c) break; } continue; }
+    if(c==='-'&&d==='-'){ const bm=/^--\[(=*)\[/.exec(code.slice(i,i+20));   // block comment
+      if(bm){ const close=']'+bm[1]+']'; let end=code.indexOf(close,i+bm[0].length); i=end<0?n:end+close.length; continue; }
+      while(i<n && code[i]!=='\n') i++; continue; }                          // line comment
+    if(c===' '||c==='\t'){ pushSpace(); i++; continue; }
+    if(c==='\n'||c==='\r'){ while(out.length && out[out.length-1]===' ') out=out.slice(0,-1); if(out.length && out[out.length-1]!=='\n') out+='\n'; i++; continue; }
+    out+=c; i++;
+  }
+  return out.replace(/^\n+/,'').replace(/\n+$/,'');
+}
+// Split code into string vs non-string segments so we never rewrite anything inside a string.
+function segLua(code){ const segs=[]; let i=0,n=code.length,buf='';
+  const flush=()=>{ if(buf){segs.push({str:false,text:buf}); buf='';} };
+  while(i<n){ const c=code[i];
+    if(c==='['){ const m=/^\[(=*)\[/.exec(code.slice(i,i+20)); if(m){ flush(); const close=']'+m[1]+']'; let e=code.indexOf(close,i+m[0].length); e=e<0?n:e+close.length; segs.push({str:true,text:code.slice(i,e)}); i=e; continue; } }
+    if(c==='"'||c==="'"){ flush(); let j=i+1; while(j<n){ if(code[j]==='\\'){j+=2;continue;} if(code[j]===c){j++;break;} j++; } segs.push({str:true,text:code.slice(i,j)}); i=j; continue; }
+    buf+=c; i++; }
+  flush(); return segs; }
+// Alias API functions used 2+ times (e.g. a=screen.setColor), like mrLennyn's "Compact". Only aliases the
+// stable global namespaces, never touches strings, and picks names that don't clash with your variables.
+const ALIAS_NS='screen|input|output|math|string|table|property';
+function aliasLua(code){
+  const segs=segLua(code), counts={}, idents=new Set();
+  const reFn=new RegExp('('+ALIAS_NS+')\\.([A-Za-z_]\\w*)','g'), reId=/[A-Za-z_]\w*/g;
+  for(const s of segs){ if(s.str) continue; let m;
+    reFn.lastIndex=0; while((m=reFn.exec(s.text))){ const pre=s.text[m.index-1]; if(pre==='.'||/\w/.test(pre||'')) continue; counts[m[0]]=(counts[m[0]]||0)+1; }
+    reId.lastIndex=0; while((m=reId.exec(s.text))) idents.add(m[0]); }
+  const targets=Object.keys(counts).filter(k=>counts[k]>=2).sort((a,b)=>counts[b]-counts[a]);
+  if(!targets.length) return code;
+  const KW=new Set('and break do else elseif end false for function goto if in local nil not or repeat return then true until while'.split(' '));
+  const used=new Set([...idents,...KW]), al='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', pool=[];
+  for(const c of al) pool.push(c); for(const a of al) for(const b of al) pool.push(a+b);
+  const name=()=>{ while(pool.length){ const x=pool.shift(); if(!used.has(x)){ used.add(x); return x; } } return '_'+used.size; };
+  const map={}; for(const t of targets) map[t]=name();
+  const keys=Object.keys(map).sort((a,b)=>b.length-a.length).map(k=>k.replace(/[.]/g,'\\.'));
+  const reRep=new RegExp('(^|[^\\w.])('+keys.join('|')+')\\b','g');
+  let out=''; for(const s of segs){ out += s.str? s.text : s.text.replace(reRep,(_,pre,fn)=>pre+map[fn]); }
+  return targets.map(t=>map[t]+'='+t).join('\n')+'\n'+out;
+}
+function copyCompact(){
+  const before=getCode(), after=aliasLua(compactLua(before));
+  navigator.clipboard.writeText(after).then(
+    ()=>logLine('Compact code copied — '+before.length+' → '+after.length+' chars (comments/whitespace stripped, repeated screen/input/math calls aliased; strings untouched).','info'),
+    ()=>logLine('Copy failed — click the editor and press Ctrl+A then Ctrl+C.','err')); }
 
 function refreshOutputs(){
   const nO=document.getElementById('numOutputs'), bO=document.getElementById('boolOutputs');
@@ -1309,6 +1347,7 @@ window.addEventListener('load', ()=>{
 
   // copy button
   document.getElementById('copyBtn').addEventListener('click', copyCode);
+  document.getElementById('copyCompactBtn').addEventListener('click', copyCompact);
 
   // tool palette
   document.querySelectorAll('#screenToolbar [data-tool]').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
