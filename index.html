@@ -173,7 +173,7 @@
       <label class="lbl">Examples</label>
       <select id="exampleSel"></select>
       <button id="copyBtn" title="Copy all code to clipboard"><i data-lucide="copy"></i> Copy</button>
-      <button id="copyCompactBtn" title="Copy minified for the 4096-char limit: strips comments/whitespace and aliases repeated screen/input/math calls (e.g. a=screen.setColor). Strings are left intact."><i data-lucide="scissors"></i> Compact</button>
+      <button id="copyCompactBtn" title="Copy minified for the 4096-char limit: strips comments/whitespace and aliases repeated screen/input/math calls with readable names (e.g. SDT=screen.drawText). Strings are left intact."><i data-lucide="scissors"></i> Compact</button>
     </div>
     <div class="editor-wrap">
       <textarea id="editor" spellcheck="false"></textarea>
@@ -210,6 +210,7 @@
         <button id="redoBtn" title="Redo (Ctrl+Shift+Z)"><i data-lucide="redo-2"></i></button>
         <span class="sep"></span>
         <label><input type="checkbox" id="gridChk" checked> Grid</label>
+        <label title="Simulate the in-game gamma: Stormworks washes colours out on monitors"><input type="checkbox" id="gammaChk" checked> SW colours</label>
       </div>
       <div class="screen-area">
         <canvas id="screen" width="64" height="64"></canvas>
@@ -257,82 +258,90 @@
 
 <script>
 /* ============================================================================
-   1. PIXEL FONT  (Stormworks-style 3x5 glyphs, 4px advance, 6px line height)
-   Each glyph = 5 rows of 3 columns. '1' = lit pixel.
+   1. PIXEL FONT — pixel-exact copy of the in-game monitor font.
+   4x5 glyphs, 5px advance (space 4px), 6px line height, uppercase only.
 ============================================================================ */
-const FONT = (function(){            // 4px-wide glyphs (chunky, like the in-game font); 5px advance
+const FONT = (function(){
+  // EXACT Stormworks monitor font — extracted from "PixelFont" (nameous, 2021),
+  // the font used by the game and the LifeBoatAPI/VSCode simulator.
+  // Each glyph = 5 rows x 4 cols ('1' = lit pixel) + its advance in pixels.
+  // Every char advances 5px except space (4px). Line height is 6px.
   const g = {};
-  const def = (ch, rows) => { g[ch] = rows; };
-  def(' ',["0000","0000","0000","0000","0000"]);
-  // digits
-  def('0',["0110","1001","1001","1001","0110"]);
-  def('1',["0010","0110","0010","0010","0111"]);
-  def('2',["0110","1001","0010","0100","1111"]);
-  def('3',["1110","0001","0110","0001","1110"]);
-  def('4',["1001","1001","1111","0001","0001"]);
-  def('5',["1111","1000","1110","0001","1110"]);
-  def('6',["0110","1000","1110","1001","0110"]);
-  def('7',["1111","0001","0010","0100","0100"]);
-  def('8',["0110","1001","0110","1001","0110"]);
-  def('9',["0110","1001","0111","0001","0110"]);
-  // uppercase
-  def('A',["0110","1001","1111","1001","1001"]);
-  def('B',["1110","1001","1110","1001","1110"]);
-  def('C',["0111","1000","1000","1000","0111"]);
-  def('D',["1110","1001","1001","1001","1110"]);
-  def('E',["1111","1000","1110","1000","1111"]);
-  def('F',["1111","1000","1110","1000","1000"]);
-  def('G',["0111","1000","1011","1001","0111"]);
-  def('H',["1001","1001","1111","1001","1001"]);
-  def('I',["1110","0100","0100","0100","1110"]);
-  def('J',["0011","0001","0001","1001","0110"]);
-  def('K',["1001","1010","1100","1010","1001"]);
-  def('L',["1000","1000","1000","1000","1111"]);
-  def('M',["1001","1111","1111","1001","1001"]);
-  def('N',["1001","1101","1011","1001","1001"]);
-  def('O',["0110","1001","1001","1001","0110"]);
-  def('P',["1110","1001","1110","1000","1000"]);
-  def('Q',["0110","1001","1001","1011","0111"]);
-  def('R',["1110","1001","1110","1010","1001"]);
-  def('S',["0111","1000","0110","0001","1110"]);
-  def('T',["1111","0100","0100","0100","0100"]);
-  def('U',["1001","1001","1001","1001","0110"]);
-  def('V',["1001","1001","1001","0110","0100"]);
-  def('W',["1001","1001","1111","1111","1001"]);
-  def('X',["1001","1001","0110","1001","1001"]);
-  def('Y',["1001","1001","0110","0100","0100"]);
-  def('Z',["1111","0001","0110","1000","1111"]);
-  // punctuation (text is auto-uppercased, so no lowercase glyphs needed)
-  def('.',["0000","0000","0000","0000","0100"]);
-  def(',',["0000","0000","0000","0100","1000"]);
-  def(':',["0000","0100","0000","0100","0000"]);
-  def(';',["0000","0100","0000","0100","1000"]);
-  def('!',["0100","0100","0100","0000","0100"]);
-  def('?',["0110","1001","0010","0000","0100"]);
-  def("'",["0100","0100","0000","0000","0000"]);
-  def('"',["1010","1010","0000","0000","0000"]);
-  def('-',["0000","0000","1110","0000","0000"]);
-  def('+',["0000","0100","1110","0100","0000"]);
-  def('=',["0000","1110","0000","1110","0000"]);
-  def('*',["0000","1010","0100","1010","0000"]);
-  def('/',["0001","0010","0100","1000","0000"]);
-  def('\\',["1000","0100","0010","0001","0000"]);
-  def('%',["1001","0010","0100","1001","0000"]);
-  def('(',["0010","0100","0100","0100","0010"]);
-  def(')',["0100","0010","0010","0010","0100"]);
-  def('[',["0110","0100","0100","0100","0110"]);
-  def(']',["0110","0010","0010","0010","0110"]);
-  def('<',["0010","0100","1000","0100","0010"]);
-  def('>',["1000","0100","0010","0100","1000"]);
-  def('_',["0000","0000","0000","0000","1111"]);
-  def('|',["0100","0100","0100","0100","0100"]);
-  def('#',["1010","1111","1010","1111","1010"]);
-  def('&',["0110","1000","0110","1001","0111"]);
-  def('@',["0110","1011","1011","1000","0110"]);
-  def('$',["0111","1010","0110","0101","1110"]);
-  def('°',["0110","1001","0110","0000","0000"]);
-  def('^',["0100","1010","0000","0000","0000"]);
-  def('~',["0000","0000","0101","1010","0000"]);
+  const d = (ch, adv, rows) => { g[ch] = {a:adv, r:rows}; };
+  d(' ',4,["0000","0000","0000","0000","0000"]);
+  d('!',5,["0100","0100","0100","0000","0100"]);
+  d('"',5,["1010","1010","0000","0000","0000"]);
+  d('#',5,["1010","1111","1010","1111","1010"]);
+  d('$',5,["0111","1010","0110","0101","1110"]);
+  d('%',5,["1100","0001","0110","1000","0011"]);
+  d('&',5,["0100","1010","0100","1010","0101"]);
+  d('\'',5,["0100","0100","0000","0000","0000"]);
+  d('(',5,["0010","0100","0100","0100","0010"]);
+  d(')',5,["0100","0010","0010","0010","0100"]);
+  d('*',5,["1001","0110","1111","0110","1001"]);
+  d('+',5,["0000","0100","1110","0100","0000"]);
+  d(',',5,["0000","0000","0000","0100","1000"]);
+  d('-',5,["0000","0000","1110","0000","0000"]);
+  d('.',5,["0000","0000","0000","0000","0100"]);
+  d('/',5,["0010","0010","0100","1000","1000"]);
+  d('0',5,["0110","1011","1101","1001","0110"]);
+  d('1',5,["0010","0110","0010","0010","0010"]);
+  d('2',5,["0110","1001","0010","0100","1111"]);
+  d('3',5,["1110","0001","0110","0001","1110"]);
+  d('4',5,["1001","1001","1111","0001","0001"]);
+  d('5',5,["1111","1000","1110","0001","1110"]);
+  d('6',5,["0110","1000","1110","1001","0110"]);
+  d('7',5,["1111","0001","0010","0010","0010"]);
+  d('8',5,["0110","1001","0110","1001","0110"]);
+  d('9',5,["0110","1001","0111","0001","0110"]);
+  d(':',5,["0000","0100","0000","0100","0000"]);
+  d(';',5,["0000","0100","0000","0100","0100"]);
+  d('<',5,["0010","0100","1000","0100","0010"]);
+  d('=',5,["0000","1110","0000","1110","0000"]);
+  d('>',5,["1000","0100","0010","0100","1000"]);
+  d('?',5,["1100","0010","0100","0000","0100"]);
+  d('@',5,["0110","1001","1011","1000","0111"]);
+  d('A',5,["0110","1001","1111","1001","1001"]);
+  d('B',5,["1110","1001","1110","1001","1110"]);
+  d('C',5,["0110","1001","1000","1001","0110"]);
+  d('D',5,["1110","1001","1001","1001","1110"]);
+  d('E',5,["1111","1000","1110","1000","1111"]);
+  d('F',5,["1111","1000","1110","1000","1000"]);
+  d('G',5,["0110","1000","1011","1001","0110"]);
+  d('H',5,["1001","1001","1111","1001","1001"]);
+  d('I',5,["0100","0100","0100","0100","0100"]);
+  d('J',5,["0001","0001","0001","1001","0110"]);
+  d('K',5,["1001","1010","1100","1010","1001"]);
+  d('L',5,["1000","1000","1000","1000","1111"]);
+  d('M',5,["1001","1111","1001","1001","1001"]);
+  d('N',5,["1001","1101","1011","1001","1001"]);
+  d('O',5,["0110","1001","1001","1001","0110"]);
+  d('P',5,["1110","1001","1110","1000","1000"]);
+  d('Q',5,["0110","1001","1001","1011","0111"]);
+  d('R',5,["1110","1001","1110","1010","1001"]);
+  d('S',5,["0111","1000","0110","0001","1110"]);
+  d('T',5,["1110","0100","0100","0100","0100"]);
+  d('U',5,["1001","1001","1001","1001","0110"]);
+  d('V',5,["1010","1010","1010","1010","0100"]);
+  d('W',5,["1001","1001","1001","1111","1001"]);
+  d('X',5,["1001","1001","0110","1001","1001"]);
+  d('Y',5,["1010","1010","0100","0100","0100"]);
+  d('Z',5,["1111","0001","0110","1000","1111"]);
+  d('[',5,["0110","0100","0100","0100","0110"]);
+  d('\\',5,["1000","1000","0100","0010","0010"]);
+  d(']',5,["0110","0010","0010","0010","0110"]);
+  d('^',5,["0100","1010","0000","0000","0000"]);
+  d('_',5,["0000","0000","0000","0000","1111"]);
+  d('`',5,["0100","0010","0000","0000","0000"]);
+  d('{',5,["0110","0100","1100","0100","0110"]);
+  d('|',5,["0100","0100","0000","0100","0100"]);
+  d('}',5,["1100","0100","0110","0100","1100"]);
+  d('~',5,["0000","0101","1010","0000","0000"]);
+  d('¦',5,["0100","0100","0000","0100","0100"]);
+  d('‘',5,["0001","0010","0000","0000","0000"]);
+  d('’',5,["0100","0010","0000","0000","0000"]);
+  d('“',5,["0101","1010","0000","0000","0000"]);
+  d('”',5,["1010","0101","0000","0000","0000"]);
   return g;
 })();
 
@@ -362,47 +371,57 @@ const Screen = {
   },
   setColor(r,g,b,a){ if(a===undefined||a===null) a=255; this.col=[clamp255(r),clamp255(g),clamp255(b),clamp255(a)]; },
 
-  rectF(x,y,w,h){ x=Math.floor(x);y=Math.floor(y);w=Math.floor(w);h=Math.floor(h);
-    for(let j=0;j<h;j++) for(let i=0;i<w;i++) this.px(x+i,y+j); },
+  // ------- game-accurate rasterizers -------
+  // In-game quirks replicated here (verified against mrLennyn's Drawing Canvas,
+  // NameousChangey's simulator and filp's stormworks-screen-api):
+  //  · drawLine does NOT draw the final pixel (hence the community +0.25 trick)
+  //  · drawRect outlines span (w+1) x (h+1) pixels
+  //  · circles are polygons: 8 segments (r<20), 12 (r<28), 16 (r>=28)
+  //  · filled shapes are GPU-style scanline fills (pixel-centre, top-left rule)
+  rectF(x,y,w,h){ if(w<=0||h<=0) return;
+    const x0=Math.ceil(x-0.5), y0=Math.ceil(y-0.5), x1=Math.ceil(x+w-0.5), y1=Math.ceil(y+h-0.5);
+    for(let j=y0;j<y1;j++) for(let i=x0;i<x1;i++) this.px(i,j); },
   rect(x,y,w,h){ x=Math.floor(x);y=Math.floor(y);w=Math.floor(w);h=Math.floor(h);
-    for(let i=0;i<w;i++){ this.px(x+i,y); this.px(x+i,y+h-1); }
-    for(let j=0;j<h;j++){ this.px(x,y+j); this.px(x+w-1,y+j); } },
-  line(x1,y1,x2,y2){ // Bresenham
-    x1=Math.floor(x1);y1=Math.floor(y1);x2=Math.floor(x2);y2=Math.floor(y2);
-    let dx=Math.abs(x2-x1), dy=-Math.abs(y2-y1);
-    let sx=x1<x2?1:-1, sy=y1<y2?1:-1, err=dx+dy;
-    while(true){ this.px(x1,y1); if(x1===x2&&y1===y2) break;
-      let e2=2*err; if(e2>=dy){err+=dy;x1+=sx;} if(e2<=dx){err+=dx;y1+=sy;} } },
-  circle(cx,cy,r){ // midpoint outline
-    cx=Math.floor(cx);cy=Math.floor(cy);r=Math.floor(r);
-    let x=r,y=0,err=1-r;
-    while(x>=y){
-      this.px(cx+x,cy+y);this.px(cx+y,cy+x);this.px(cx-y,cy+x);this.px(cx-x,cy+y);
-      this.px(cx-x,cy-y);this.px(cx-y,cy-x);this.px(cx+y,cy-x);this.px(cx+x,cy-y);
-      y++; if(err<0){err+=2*y+1;} else {x--; err+=2*(y-x)+1;} } },
-  circleF(cx,cy,r){ cx=Math.floor(cx);cy=Math.floor(cy);r=Math.floor(r);
-    for(let y=-r;y<=r;y++) for(let x=-r;x<=r;x++) if(x*x+y*y<=r*r) this.px(cx+x,cy+y); },
-  triangle(x1,y1,x2,y2,x3,y3){ this.line(x1,y1,x2,y2);this.line(x2,y2,x3,y3);this.line(x3,y3,x1,y1); },
-  triangleF(x1,y1,x2,y2,x3,y3){
-    const minX=Math.floor(Math.min(x1,x2,x3)), maxX=Math.ceil(Math.max(x1,x2,x3));
-    const minY=Math.floor(Math.min(y1,y2,y3)), maxY=Math.ceil(Math.max(y1,y2,y3));
-    const area=(x2-x1)*(y3-y1)-(x3-x1)*(y2-y1);
-    if(area===0) return;
-    for(let y=minY;y<=maxY;y++) for(let x=minX;x<=maxX;x++){
-      const w0=((x2-x1)*(y-y1)-(y2-y1)*(x-x1));
-      const w1=((x3-x2)*(y-y2)-(y3-y2)*(x-x2));
-      const w2=((x1-x3)*(y-y3)-(y1-y3)*(x-x3));
-      if((w0>=0&&w1>=0&&w2>=0)||(w0<=0&&w1<=0&&w2<=0)) this.px(x,y);
+    for(let i=0;i<=w;i++){ this.px(x+i,y); this.px(x+i,y+h); }        // in-game: w+1 / h+1
+    for(let j=1;j<h;j++){ this.px(x,y+j); this.px(x+w,y+j); } },
+  line(x1,y1,x2,y2){ // grid-lerp walk, END PIXEL EXCLUDED (like in-game)
+    const dx=x2-x1, dy=y2-y1, N=Math.max(Math.abs(dx),Math.abs(dy));
+    for(let s=0;s<N;s++){ const t=s/N; this.px(Math.round(x1+t*dx), Math.round(y1+t*dy)); } },
+  _circlePts(cx,cy,r){
+    const segs = r>=28?16 : r>=20?12 : 8, pts=[];
+    for(let i=0;i<segs;i++){ const a=i*2*Math.PI/segs; pts.push([cx+r*Math.cos(a), cy+r*Math.sin(a)]); }
+    return pts; },
+  circle(cx,cy,r){ // in-game circles are polygons made of lines
+    const p=this._circlePts(cx,cy,r);
+    for(let i=0;i<p.length;i++){ const q=p[(i+1)%p.length]; this.line(p[i][0],p[i][1],q[0],q[1]); } },
+  circleF(cx,cy,r){ this._fillPoly(this._circlePts(cx,cy,r)); },
+  _fillPoly(pts){ // pixel-centre scanline fill of a convex-ish polygon
+    let minY=Infinity,maxY=-Infinity;
+    for(const p of pts){ if(p[1]<minY)minY=p[1]; if(p[1]>maxY)maxY=p[1]; }
+    for(let y=Math.ceil(minY-0.5); y+0.5<=maxY; y++){
+      const yc=y+0.5, xs=[];
+      for(let i=0;i<pts.length;i++){
+        const a=pts[i], b=pts[(i+1)%pts.length];
+        if((a[1]<=yc&&b[1]>yc)||(b[1]<=yc&&a[1]>yc)){
+          xs.push(a[0]+(yc-a[1])/(b[1]-a[1])*(b[0]-a[0]));
+        }
+      }
+      xs.sort((a,b)=>a-b);
+      for(let k=0;k+1<xs.length;k+=2){
+        for(let x=Math.ceil(xs[k]-0.5); x+0.5<xs[k+1]; x++) this.px(x,y);
+      }
     } },
+  triangle(x1,y1,x2,y2,x3,y3){ this.line(x1,y1,x2,y2);this.line(x2,y2,x3,y3);this.line(x3,y3,x1,y1); },
+  triangleF(x1,y1,x2,y2,x3,y3){ this._fillPoly([[x1,y1],[x2,y2],[x3,y3]]); },
   glyph(gx,gy,rows){ for(let r=0;r<5;r++){ const row=rows[r]; for(let c=0;c<4;c++) if(row[c]==='1') this.px(gx+c,gy+r); } },
   text(x,y,str){
     x=Math.floor(x); y=Math.floor(y); let cx=x;
     for(const ch of String(str).toUpperCase()){   // Stormworks renders text in CAPITALS
       if(ch==='\n'){ y+=6; cx=x; continue; }
-      const rows = FONT[ch] || FONT['?'];
-      this.glyph(cx,y,rows); cx+=5;                // Stormworks advances 5px per character
+      const gl = FONT[ch] || FONT['?'];
+      this.glyph(cx,y,gl.r); cx+=gl.a;             // 5px advance (space 4px), like in-game
     } },
-  textWidth(str){ let max=0,cur=0; for(const ch of String(str)){ if(ch==='\n'){max=Math.max(max,cur);cur=0;} else cur+=5; } return Math.max(max,cur); },
+  textWidth(str){ let max=0,cur=0; for(const ch of String(str).toUpperCase()){ if(ch==='\n'){max=Math.max(max,cur);cur=0;} else cur+=(FONT[ch]||FONT['?']).a; } return Math.max(max,cur); },
   textBox(x,y,w,h,str,halign,valign){
     // word-wrap to width w (5px per char), then align inside the box
     halign=halign||0; valign=valign||0;
@@ -441,6 +460,12 @@ let outputBools    = {};
 
 // view + line-tool state
 let gridOn=true;
+// Stormworks applies gamma to monitor colours (washed out look) — replicate it.
+// c' = 255 * ((c/255)/0.85)^(1/2.4)  (see NameousChangey's simulator source)
+let gammaOn=true;
+const GAMMA_LUT=(()=>{ const t=new Uint8ClampedArray(256);
+  for(let c=0;c<256;c++) t[c]=Math.round(255*Math.pow((c/255)/0.85, 1/2.4));
+  return t; })();
 let linePrev=null;            // {x1,y1,x2,y2} preview while dragging a line
 
 // Mask Lua comments and string literals with spaces (same length) so we can
@@ -477,15 +502,20 @@ function insertIntoFunction(code, fnName, line){
       else depth++;
     }
     if(t){ const at=t.index;             // position of the matching 'end' in original
-      // indentation = whitespace before 'end'
       const lineStart=code.lastIndexOf('\n',at-1)+1;
-      const indent=(code.slice(lineStart,at).match(/^\s*/)||[''])[0];
-      const ins=indent+'  '+line+'\n';
-      return code.slice(0,lineStart)+ins+code.slice(lineStart);
+      // VS Code-style indent: match the first indented body line, else opener indent + 4 spaces
+      const openStart=code.lastIndexOf('\n',m.index)+1;
+      const openIndent=(code.slice(openStart).match(/^[ \t]*/)||[''])[0];
+      let bodyIndent=null;
+      for(const bl of code.slice(m.index+m[0].length, lineStart).split('\n').slice(1)){
+        if(bl.trim()!==''){ bodyIndent=(bl.match(/^[ \t]*/)||[''])[0]; break; }
+      }
+      if(bodyIndent===null || bodyIndent.length<=openIndent.length) bodyIndent=openIndent+'    ';
+      return code.slice(0,lineStart)+bodyIndent+line+'\n'+code.slice(lineStart);
     }
   }
   // function not found → create it
-  const block='function '+fnName+'()\n  '+line+'\nend\n';
+  const block='function '+fnName+'()\n    '+line+'\nend\n';
   if(fnName==='onTick'){
     const od=maskLua(code).search(/function\s+onDraw\s*\(/);
     if(od>=0){ const ls=code.lastIndexOf('\n',od-1)+1; return code.slice(0,ls)+block+'\n'+code.slice(ls); }
@@ -676,6 +706,8 @@ function renderCanvas(){
   const sctx=scratch.getContext('2d');
   const img=sctx.createImageData(Screen.W,Screen.H);
   img.data.set(Screen.buf.data);
+  if(gammaOn){ const d=img.data;
+    for(let i=0;i<d.length;i+=4){ d[i]=GAMMA_LUT[d[i]]; d[i+1]=GAMMA_LUT[d[i+1]]; d[i+2]=GAMMA_LUT[d[i+2]]; } }
   sctx.putImageData(img,0,0);
   view.width=Screen.W*zoom; view.height=Screen.H*zoom;
   view.style.width=(Screen.W*zoom)+'px'; view.style.height=(Screen.H*zoom)+'px';   // exact 1:1 display
@@ -917,9 +949,10 @@ function toolUp(e){
   const noDrag = (a.x===p.x && a.y===p.y);
   if(noDrag){ renderCanvas(); return; }          // ignore a non-drag for shapes
   const f=fillShape?'F':'';
-  if(tool==='line')      insertDraw(['screen.drawLine('+a.x+', '+a.y+', '+p.x+', '+p.y+')']);
+  if(tool==='line')      insertDraw(['screen.drawLine('+a.x+', '+a.y+', '+(p.x+0.25)+', '+(p.y+0.25)+')']);  // +0.25: in-game lines skip the end pixel
   else if(tool==='rect'){ const x=Math.min(a.x,p.x),y=Math.min(a.y,p.y),w=Math.abs(p.x-a.x),h=Math.abs(p.y-a.y);
-    insertDraw(['screen.drawRect'+f+'('+x+', '+y+', '+w+', '+h+')']); }
+    if(fillShape) insertDraw(['screen.drawRectF('+x+', '+y+', '+(w+1)+', '+(h+1)+')']);
+    else insertDraw(['screen.drawRect('+x+', '+y+', '+w+', '+h+')']); }
   else if(tool==='circle'){ const r=Math.round(Math.hypot(p.x-a.x,p.y-a.y));
     insertDraw(['screen.drawCircle'+f+'('+a.x+', '+a.y+', '+r+')']); }
   else if(tool==='triangle'){ const x1=Math.min(a.x,p.x),x2=Math.max(a.x,p.x),y1=Math.min(a.y,p.y),y2=Math.max(a.y,p.y),mx=Math.round((x1+x2)/2);
@@ -1036,10 +1069,21 @@ function aliasLua(code){
   const targets=Object.keys(counts).filter(k=>counts[k]>=2).sort((a,b)=>counts[b]-counts[a]);
   if(!targets.length) return code;
   const KW=new Set('and break do else elseif end false for function goto if in local nil not or repeat return then true until while'.split(' '));
-  const used=new Set([...idents,...KW]), al='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', pool=[];
-  for(const c of al) pool.push(c); for(const a of al) for(const b of al) pool.push(a+b);
-  const name=()=>{ while(pool.length){ const x=pool.shift(); if(!used.has(x)){ used.add(x); return x; } } return '_'+used.size; };
-  const map={}; for(const t of targets) map[t]=name();
+  const used=new Set([...idents,...KW]);
+  // Readable aliases: namespace initial + the method's capitals (or first letter),
+  // e.g. screen.drawText -> SDT, screen.setColor -> SSC, math.floor -> MF.
+  const name=(full)=>{
+    const dot=full.indexOf('.'), ns=full.slice(0,dot), fn=full.slice(dot+1);
+    const caps=fn[0].toUpperCase()+((fn.match(/[A-Z]/g)||[]).join(''));
+    const base=ns[0].toUpperCase()+caps;
+    let cand=base, i=1;
+    while(used.has(cand)){
+      cand = (i<fn.length) ? ns[0].toUpperCase()+fn.slice(0,i+1).toUpperCase() : base+i;
+      i++;
+    }
+    used.add(cand); return cand;
+  };
+  const map={}; for(const t of targets) map[t]=name(t);
   const keys=Object.keys(map).sort((a,b)=>b.length-a.length).map(k=>k.replace(/[.]/g,'\\.'));
   const reRep=new RegExp('(^|[^\\w.])('+keys.join('|')+')\\b','g');
   let out=''; for(const s of segs){ out += s.str? s.text : s.text.replace(reRep,(_,pre,fn)=>pre+map[fn]); }
@@ -1048,7 +1092,7 @@ function aliasLua(code){
 function copyCompact(){
   const before=getCode(), after=aliasLua(compactLua(before));
   navigator.clipboard.writeText(after).then(
-    ()=>logLine('Compact code copied — '+before.length+' → '+after.length+' chars (comments/whitespace stripped, repeated screen/input/math calls aliased; strings untouched).','info'),
+    ()=>logLine('Compact code copied — '+before.length+' → '+after.length+' chars (comments/whitespace stripped, repeated calls aliased, e.g. SDT=screen.drawText; strings untouched).','info'),
     ()=>logLine('Copy failed — click the editor and press Ctrl+A then Ctrl+C.','err')); }
 
 function refreshOutputs(){
@@ -1246,6 +1290,676 @@ function onDraw()
     screen.setColor(120,220,255)
     screen.drawTextBox(0, 0, w, h, "Wrapped, centered text inside the box", 0, 0)
 end`,
+
+"10 · HEVS HUD — Anonymous Sandwich (Klara)":
+`-- HEVS Artificial Horizon — by Anonymous Sandwich / Klara
+-- Source gist: https://gist.github.com/KlaraChristensen/a8920ac84fda7f1456664146f9afde2b
+-- Workshop:    https://steamcommunity.com/id/AnonSandwich/
+-- Included here for preview only — all credit to the original author.
+--
+-- Inputs to play with (add sliders on the right):
+--   N2 altitude (m) · N4/N5/N6 orientation from physics sensor (rad-ish, try -1..1)
+--   N13 speed (m/s) · N17 compass (turns, -1..1) · B1 night mode
+--
+-- In game this script is configured through property components; here they are
+-- shimmed inline with the author's own defaults so it runs unmodified.
+local props = {
+    ["f"] = "021431652002282400528514A15C51410C90131DB0E4500128215301D2A5614100A28D15301D1651142314100C165314128C165500A28A15301C29C314A0D215C202515C10D21165328114C02540C000C28C0E4300A1440E450C028A09201C0E440800920A4285300315328550C000A0D229C0A450C000D1D21E429C30C028A155500528514115316540C000B15328D214A15C314A15C025301314A15C20C90DB314A29315C40C028A15316541C000C28B1E4414115300D28D600514115316528A29C31C000C1E4408000C28C0A440051C01E415330051C015341C000C1E4294300528515330C014C0E4328401C0E4400528215329D20051E4300528514A300528514B414100C28C165400514128A15340C000D28C165508000D28A15329D50C000A0D229C0E420C014D30052851653004284165300528515D500228215301D29D300228215550C028A15301C0E4308000C0A4300114C2A531C028C1E4314100A28A10E4200114A41C000C14C1E41145408014C28C0A43089013293",
+    ["Speed Units"] = 1,
+    ["Altitude Units"] = 1,
+    ["Vertical Speed Indicator"] = true,
+    ["Vertical Speed Factor"] = 0.2,
+    ["Vertical Speed Dynamic Color"] = true,
+    ["Steering Bar Style"] = 1,
+    ["Bar Fade"] = true,
+    ["Draw Bars"] = .5,
+    ["Bar Style"] = 1,
+    ["Show Angle Text"] = 2,
+    ["Prograde Indicator"] = true,
+    ["Compass"] = true,
+    ["Compass Wheel"] = true,
+    ["Altitude Wheel"] = true,
+    ["Speed Wheel"] = true,
+    ["Bottom Padding (px)"] = 0,
+    ["Top Padding (px)"] = 0,
+    ["Speed Indicator"] = true,
+    ["Altitude Indicator"] = true,
+    ["Speed Wheel Fade"] = true,
+    ["Altitude Wheel Fade"] = true,
+    ["Compass Wheel Fade"] = true,
+    ["Font"] = 4,
+    ["Horizon Line"] = false,
+    ["Show Speed Units"] = true,
+    ["Show Altitude Units"] = true,
+    ["Compass Position"] = false,
+    ["Outline Speed Indicator"] = false,
+    ["Outline Altitude Indicator"] = false,
+    ["Outline Compass"] = false,
+
+    ["Sky Color"] = "18,12,72",
+    ["Ground Color"] = "55,23,9",
+    ["Bar Text Color"] = "80,80,80",
+    ["Speed Text Color"] = "100,100,100",
+    ["Speed Wheel Text Color"] = "100,100,100",
+    ["Altitude Text Color"] = "100,100,100",
+    ["Altitude Wheel Text Color"] = "100,100,100",
+    ["Compass Text Color"] = "100,100,100",
+    ["Compass Wheel Color"] = "100,100,100",
+    ["Steering Bar Color"] = "200,150,0",
+    ["Bar Color"] = "100,100,100",
+    ["Horizon Line Color"] = "80,80,80",
+    ["Text Background Color"] = "1,1,1",
+    ["Wheel Background Color"] = "1,1,1,50",
+    ["Vertical Speed Background Color"] = "1,1,1",
+    ["Vertical Speed Color"] = "100,100,100",
+    ["Prograde Color"] = "100,0,100",
+    ["Speed Indicator Outline Color"] = "100,100,100",
+    ["Altitude Indicator Outline Color"] = "100,100,100",
+    ["Compass Outline Color"] = "100,100,100",
+
+    ["Night Sky Color"] = "0,10,0",
+    ["Night Ground Color"] = "0,5,0",
+    ["Night Bar Text Color"] = "0,80,0",
+    ["Night Speed Text Color"] = "0,100,0",
+    ["Night Speed Wheel Text Color"] = "0,100,0",
+    ["Night Altitude Text Color"] = "0,100,0",
+    ["Night Altitude Wheel Text Color"] = "0,100,0",
+    ["Night Compass Text Color"] = "0,100,0",
+    ["Night Compass Wheel Color"] = "0,100,0",
+    ["Night Steering Bar Color"] = "0,80,0",
+    ["Night Bar Color"] = "0,80,0",
+    ["Night Horizon Line Color"] = "0,80,0",
+    ["Night Text Background Color"] = "0,1,0",
+    ["Night Wheel Background Color"] = "0,1,0,50",
+    ["Night Vertical Speed Background Color"] = "0,1,0",
+    ["Night Vertical Speed Color"] = "0,80,0",
+    ["Night Prograde Color"] = "100,0,100",
+    ["Night Speed Indicator Outline Color"] = "0,100,0",
+    ["Night Altitude Indicator Outline Color"] = "0,100,0",
+    ["Night Compass Outline Color"] = "0,100,0",
+}
+property = {
+    getText   = function(k) return props[k] or "" end,
+    getNumber = function(k) return tonumber(props[k]) or 0 end,
+    getBool   = function(k) return props[k] == true end,
+}
+
+--The coordinate points for the steering bar. each line is a new style.
+steeringBarStack = {
+    {{-11,0,-4,0},{11,0,4,0},{-1,0,2,0},{-4,0,-4,2},{4,0,4,2}},
+    {{-9,0,-4,0},{-4,1,-2,3},{-3,2,0,-1},{0,-1,3,2},{3,2,5,0},{5,0,10,0}}
+}
+
+--Simple number clamp function...
+function clamp(x,low,high)
+    if x < low then return low elseif x > high then return high else return x end
+end
+
+--Generating the data for Alyosha's efficient 3x5 font.
+local f,F,i=property.getText("f"),{},1
+while i<#f do
+    i=i+1
+    A={}
+    for j=1,"0x"..f:sub(i-1,i-1) do
+        B="0x"..f:sub(i,i+2)
+        A[#A+1]={B>>8,(B>>3)&7,(B>>6)&3,B&7}
+        i=i+3
+    end
+    F[#F+1]=A
+end
+
+prvAlt = 0
+prvSpeed = 0
+
+--Self explanatory...
+spdUnitsNum = property.getNumber("Speed Units")
+speedMultiplier = 1
+spdUnits = ""
+if spdUnitsNum == 1 then
+    speedMultiplier = 1.94384
+    spdUnits = "KN"
+elseif spdUnitsNum == 2 then
+    speedMultiplier = 2.23694
+    spdUnits = "MPH"
+elseif spdUnitsNum == 3 then
+    speedMultiplier = 3.6
+    spdUnits = "KMH"
+elseif spdUnitsNum == 4 then
+    spdUnits = "m/s"
+end
+
+--Coordinate points for each pitch bar style. Each line is a new style.
+barStyleStack = {
+    {{4,8},{5,1},{3,7},{6,2},{5,29},{7,31},{6,10},{14,18},{22,26},{8,12},{16,20},{24,28}},
+    {{5,29},{7,31},{6,10},{14,18},{22,26},{8,12},{16,20},{24,28}},
+    {{31,25},{30,34},{36,32},{5,29},{7,31},{6,10},{14,18},{22,26},{8,12},{16,20},{24,28}},
+    {{31,25},{30,34},{36,32},{4,08},{5,01},{3,07},{6,02},{5,29},{7,31},{6,10},{14,18},{22,26},{08,12},{16,20},{24,28}}
+}
+
+--Used in generating the coordinates for the pitch bars
+allBarPoints = {{15,3},{15,0},{12,0},{11,0},{9,0},{8,0},{5,0},{4,0},{1,0},{21,1},{20,6},{20,-6}}
+
+--Just declares a default w&h, will automatically change when it is drawn onto a screen.
+width,height = 64,64
+
+--All the properties...
+
+--Throughout the text calls, you will see this value being referenced. Since the text is narrower for the custom text, the backgrounds, positions, outlines, etc. need to be adjusted based on that length.
+font = property.getNumber("Font")
+
+--Grabs the pitch bar style you want
+barStyle = barStyleStack[property.getNumber("Bar Style")]
+drawBars = property.getNumber("Draw Bars")
+showDegrees = property.getNumber("Show Angle Text")
+
+--grabs the steering bar style you want
+steeringBar = steeringBarStack[property.getNumber("Steering Bar Style")]
+altUnitsNum = property.getNumber("Altitude Units")
+verticalSpeedIndicator = property.getBool("Vertical Speed Indicator")
+vspeedDynamicColor = property.getBool("Vertical Speed Dynamic Color")
+enableVelocityVector = property.getBool("Velocity Vector")
+fadeActive = property.getBool("Bar Fade")
+showCompass = property.getBool("Compass")
+showCompassWheel = property.getBool("Compass Wheel")
+altitudeWheel = property.getBool("Altitude Wheel")
+speedWheel = property.getBool("Speed Wheel")
+bottomPadding = property.getNumber("Bottom Padding (px)")
+topPadding = property.getNumber("Top Padding (px)")
+verticalSpeedFactor = property.getNumber("Vertical Speed Factor")
+showSpeed = property.getBool("Speed Indicator")
+showAltitude = property.getBool("Altitude Indicator")
+speedWheelFade = property.getBool("Speed Wheel Fade")
+altitudeWheelFade = property.getBool("Altitude Wheel Fade")
+compassWheelFade = property.getBool("Compass Wheel Fade")
+drawCenter = property.getBool("Horizon Line")
+showSpeedUnits = property.getBool("Show Speed Units")
+showAltUnits = property.getBool("Show Altitude Units")
+compassTop = property.getBool("Compass Position")
+outlineSpeed = property.getBool("Outline Speed Indicator")
+outlineAlt = property.getBool("Outline Altitude Indicator")
+outlineCompass = property.getBool("Outline Compass")
+
+
+--A list of all the names of the colors, makes more sense with the function below.
+colorNames = {"Sky", "Ground","Bar Text","Speed Text","Speed Wheel Text","Altitude Text","Altitude Wheel Text",
+"Compass Text","Compass Wheel","Steering Bar","Bar","Wheel Background","Text Background","Vertical Speed Background",
+"Vertical Speed","Velocity Vector","Horizon Line","Speed Indicator Outline","Altitude Indicator Outline","Compass Outline"}
+
+
+--[[
+Based on the list of color names, go ahead and get the property information for "[name] Color" and "Night [name] Color".
+Break up each string by wherever there is not a number. ex. 50&20,42#56 will become {50,20,42,56}
+If there is a 4th value, that will be used as opacity later.
+If there are less than 3 values, the color will be made pink instead for error tracking
+all the color tables are saved in a table for later
+]]
+colors = {}
+for a,b in ipairs(colorNames) do
+    dayColors = {}
+    for num in string.gmatch(property.getText(b.." Color"), "%d+") do
+        table.insert(dayColors,clamp(tonumber(num),0,255))
+    end
+
+    if #dayColors < 3 then dayColors = {255,0,255} end
+
+    nightColors = {}
+    for num in string.gmatch(property.getText("Night "..b.." Color"), "%d+") do
+        table.insert(nightColors,clamp(tonumber(num),0,255))
+    end
+
+    if #nightColors < 3 then nightColors = {255,0,255} end
+
+    colors[b] = {dayColors,nightColors}
+end
+
+
+--[[
+Whenever you want to set a color, you call setColor([name of the color]). ex. setColor("Sky")
+If nightmode is active, it will automaticallty switch.
+If you input a manual opacity, that will be used, otherwise the opacity given in the color code will be used. If neither are present, than opacity will be set to full.
+]]
+function setColor(colorName,opacity)
+    colorSelect = colors[colorName]
+    if nightMode then
+        colorSelect = colorSelect[2]
+    else
+        colorSelect = colorSelect[1]
+    end
+
+    realOpacity = opacity or 255
+    if not opacity then
+        if #colorSelect >= 4 then
+            opacity = colorSelect[4]
+        else
+            opacity = 255
+        end
+    end
+    screen.setColor(colorSelect[1],colorSelect[2],colorSelect[3],opacity)
+end
+
+function onTick()
+
+    altitude = input.getNumber(2)
+    nightMode = input.getBool(1)
+
+    -- Code Below using Quale's matrix math on Physics Sensor
+    -- Get angles.
+    x = input.getNumber(4)
+    y = input.getNumber(5)
+    z = input.getNumber(6)
+    cx, sx = math.cos(x), math.sin(x)
+    cy, sy = math.cos(y), math.sin(y)
+    cz, sz = math.cos(z), math.sin(z)
+    m02 = sx*sz + cx*sy*cz
+    rollLi = math.atan(cy*sz, math.sqrt((cy*cz)^2 + sy^2)) / math.pi*2
+    rollU = math.atan(cx*cz + sx*sy*sz, math.sqrt((-cx*sz + sx*sy*cz)^2 + (sx*cy)^2)) / math.pi*2
+    rollF = -math.atan(-sx*cz + cx*sy*sz, math.sqrt(m02^2 + (cx*cy)^2))
+    rollL = math.atan(math.sin(rollLi), math.sin(rollU)) + math.pi/2
+    compass = (input.getNumber(17) * math.pi * -2) * (180/math.pi) % 360
+
+    --Used for velocity vector
+    speedX = input.getNumber(7)
+    speedY = input.getNumber(8)
+    speedZ = input.getNumber(9)
+
+    --base speed is necessary to keep to manatain linearity in certain features whenever changing between units
+    baseSpeed = input.getNumber(13)
+    speed = baseSpeed*speedMultiplier
+
+    verticalSpeed = (prvAlt-altitude)*verticalSpeedFactor*-60
+    prvAlt = altitude
+
+    --If vertical speed indicator is on, this will offset everything from the right of the screen by one pixel
+    if verticalSpeedIndicator then
+        vertspdhorizoffset = -1
+    else vertspdhorizoffset = 0 end
+
+    --Convert altitude into the rite unit and save said unit for later
+    if altUnitsNum == 1 then
+        altitude = altitude*3.28084+.5
+        altitudeToDisplay = math.floor(altitude)
+        altUnits = "ft"
+        if altitude > 7500 then
+            altUnits = "fl"
+            altitudeToDisplay = math.floor(altitude/100)
+        end
+    else
+        altUnits = "M"
+        altitudeToDisplay = math.floor(altitude+.5)
+    end
+
+    --[[
+    Generate all the bar points for the pitch bars at every single angle.
+    If you wanted to change the spacing between the pitch bars, this is where you would do it, by changing the 150 multiplier
+    ]]
+    barPoints = {}
+    cosRoll = math.cos(rollL)
+    sinRoll = math.sin(rollL)
+    negCosRoll = math.cos(-rollL)
+    negSinRoll = math.sin(-rollL)
+    for i = drawBars, 18, drawBars do
+        barPoints[i] = {}
+        for a,b in ipairs(allBarPoints) do
+            diffUpper = (i*(math.pi/18)-rollF)*150
+            diffLower = (-i*(math.pi/18)-rollF)*150
+            for k = -1, 1, 2 do
+                displace = math.max(k,0)
+                barPoints[i][(a-1)*4+2+k] = {x=math.floor(width/2-1 + (cosRoll*(diffLower+b[2]))+negSinRoll* -k * b[1]+displace),y=math.floor(height/2 + (sinRoll*(diffLower+b[2]))+negCosRoll* -k * b[1])}
+                barPoints[i][(a-1)*4+3+k] = {x=math.floor(width/2-1 + (cosRoll*(diffUpper-b[2]))+negSinRoll* -k * b[1]+displace),y=math.floor(height/2 + (sinRoll*(diffUpper-b[2]))+negCosRoll* -k * b[1])}
+            end
+        end
+    end
+end
+
+function onDraw()
+
+    --anytime the screen is drawn, get the width and height.
+    if screen.getWidth() ~= 0 then
+        width,height = screen.getWidth(),screen.getHeight()
+    end
+
+    --Generate the center of the screen after all the adjustments
+    centerX = width/2-1
+    centerY = (topPadding/2)+((height-bottomPadding)/2)
+
+    --generate the line along the horizon. This is needed even if you are not using the horizon line.
+    horizonBar = {{},{}}
+    horizonBar[1].y = centerY + (sinRoll*(-rollF*150))+negCosRoll*200
+    horizonBar[2].y = centerY + (sinRoll*(-rollF*150))+negCosRoll*-200
+    horizonBar[1].x = centerX + (cosRoll*(-rollF*150))+negSinRoll*200
+    horizonBar[2].x = centerX + (cosRoll*(-rollF*150))+negSinRoll*-200
+
+    --This is how the sky and ground is drawn. Calculate a slope and offset (If you don't know how to do this, you are either in middle school or stupid)
+    slope = (horizonBar[2].y-horizonBar[1].y)/(horizonBar[2].x-horizonBar[1].x)
+    b = ((centerX-horizonBar[1].x)*slope)+horizonBar[1].y
+    inverted = 1
+    if math.abs(rollL-math.pi/2) > math.pi/2 then inverted = -1 end
+    --Draw lines along the horizon bar reaching up to the top and bottom of each screen with the corresponding color.
+    for i = 0,width-1 do
+        origin = slope*(i-centerX)+b
+        --Upper Region
+        setColor("Sky")
+        screen.drawLine(i,origin,i,-1000*inverted)
+
+        --Lower Region
+        setColor("Ground")
+        screen.drawLine(i,origin,i,1000*inverted)
+    end
+
+    --If you want to draw the horizon line
+    if drawCenter then
+        setColor("Horizon Line")
+        screen.drawLine(horizonBar[1].x,horizonBar[1].y,horizonBar[2].x,horizonBar[2].y)
+    end
+
+    --drawBars == 0 means do not draw pitch bars
+    if drawBars > 0 then
+        --drawBars == 0.5 means every 5 degrees, while drawBars == 1 means every 10 degrees
+        for i = drawBars, 18, drawBars do
+            if i ~= 9 then
+
+                --simple calculations for if you want the pitch bars to fade the further away from center they are
+                if fadeActive then
+                    new = math.abs((math.abs(i)*(math.pi/18)-math.abs(rollF))*150)*1.5
+                else
+                    new = 0
+                end
+
+                setColor("Bar",clamp(220-new,0,220))
+
+                --Now is where you finally draw the pitch bars
+                for a,b in ipairs(barStyle) do
+                    screen.drawLine(barPoints[i][b[1]].x,barPoints[i][b[1]].y,barPoints[i][b[2]].x,barPoints[i][b[2]].y)
+                end
+
+                --showDegrees == 0 means no labels, showDegrees == 1 means only show the 10 degree labels, while showDegrees == 2 means show all (5 degrees) labels
+                if showDegrees > 0 then
+                    numToShow = ""
+                    if (i%1) == 0 then
+                        numToShow = tostring(math.abs(math.floor(-math.abs(-i+9)+9)))
+                    end
+                    if showDegrees == 2 then
+                        numToShow = tostring(math.abs(math.floor((-math.abs(-i+9)+9)*10)))
+                    end
+
+                    setColor("Bar Text",clamp(220-new,0,220))
+                    --draw the labels, trying to keep them aligned and centered well with the pitch bars
+                    numLength = numToShow:len()
+                    Txt(barPoints[i][37].x-(numLength-1)*font,barPoints[i][37].y-2,numToShow)
+                    Txt(barPoints[i][38].x-(numLength-1)*font,barPoints[i][38].y-2,numToShow)
+                    Txt(barPoints[i][39].x-3,barPoints[i][39].y-2,numToShow)
+                    Txt(barPoints[i][40].x-3,barPoints[i][40].y-2,numToShow)
+                end
+            --i == 9 means straight up or down
+            elseif i == 9 then
+                --Just draw a X at the top and bottom
+                new = math.abs((math.abs(i)*(math.pi/18)-math.abs(rollF))*150)*1.5
+                setColor("Bar",clamp(220-new,0,220))
+                screen.drawLine(barPoints[i][41].x,barPoints[i][41].y,barPoints[i][47].x,barPoints[i][47].y)
+                screen.drawLine(barPoints[i][42].x,barPoints[i][42].y,barPoints[i][48].x,barPoints[i][48].y)
+                screen.drawLine(barPoints[i][43].x,barPoints[i][43].y,barPoints[i][45].x,barPoints[i][45].y)
+                screen.drawLine(barPoints[i][44].x,barPoints[i][44].y,barPoints[i][46].x,barPoints[i][46].y)
+            end
+        end
+    end
+
+    --You may know as the prograde indicator if you played KSP. This draws the direction you are moving.
+    if enableVelocityVector then
+        vectorX = math.atan(speedX,speedZ)*height
+        vectorY = -math.atan(speedY,speedZ)*height
+        setColor("Velocity Vector")
+        --Only draw it if you are going faster than 1m/s so you don't get it spazzing all over your screen because you are slip and sliding around.
+        if baseSpeed > 1 then
+            screen.drawCircle(centerX+vectorX-1,centerY+vectorY,3)
+            screen.drawLine(centerX-4+vectorX,centerY+vectorY,centerX-7+vectorX,centerY+vectorY)
+            screen.drawLine(centerX+vectorX-1,centerY-3+vectorY,centerX+vectorX-1,centerY-5+vectorY)
+            screen.drawLine(centerX+2+vectorX,centerY+vectorY,centerX+5+vectorX,centerY+vectorY)
+        end
+    end
+
+    --Steering Bar
+    setColor("Steering Bar")
+    for a,b in pairs(steeringBar) do
+        screen.drawLine(centerX+b[1],centerY+b[2],centerX+b[3],centerY+b[4])
+    end
+
+    setColor("Wheel Background")
+
+    --These are all the background areas for the indicator wheels. These first three draw the main areas depending on if each one is on.
+    --You need the speed indicator on to show the speed wheel
+    if speedWheel and showSpeed then
+        screen.drawRectF(0,6,font*2+1,height-12-bottomPadding)
+    end
+    --You need the altitude indicator on to show the altitude wheel
+    if altitudeWheel and showAltitude then
+        screen.drawRectF(width-(font*2)-1+vertspdhorizoffset,6,(font*2)+1-vertspdhorizoffset,height-12)
+    end
+
+    --the compass wheel will show whether or not you have the indicator on
+    if showCompassWheel then
+        --whether to draw the compass at the top or bottom of the screen
+        if compassTop then
+            screen.drawRectF((font*2)+1,topPadding,width-((font*2)+1)*2+vertspdhorizoffset,6)
+        else
+            screen.drawRectF((font*2)+1,height-6-bottomPadding,width-((font*2)+1)*2+vertspdhorizoffset,6)
+        end
+    end
+
+    --Because the background is likeley transparent. The 4 corners are drawn seperately depending on what is enabled
+    if (showCompassWheel and not compassTop) or speedWheel then
+        screen.drawRectF(0,height-6-bottomPadding,(font*2)+1,6)
+    end
+    if (showCompassWheel and not compassTop) or altitudeWheel then
+        screen.drawRectF(width-(font*2)-1+vertspdhorizoffset,height-6-bottomPadding,(font*2)+1-vertspdhorizoffset,6)
+    end
+
+    if (showCompassWheel and compassTop) or speedWheel then
+        screen.drawRectF(0,topPadding,(font*2)+1,6)
+    end
+    if (showCompassWheel and compassTop) or altitudeWheel then
+        screen.drawRectF(width-(font*2)-1+vertspdhorizoffset,topPadding,(font*2)+1-vertspdhorizoffset,6)
+    end
+
+    --Draw the speed wheel text
+    if speedWheel and showSpeed then
+        for i = math.floor((speed-(height/32*20))/10)*10, math.floor((speed+(height/32*20))/10)*10, 10 do
+            fadeValue = clamp(((math.abs(1/(i-speed))*(height/64))^1.5*6000-20),0,255)
+            if not speedWheelFade then
+                fadeValue = 255
+            end
+            setColor("Speed Wheel Text",fadeValue)
+
+            speedBarToDisplay = string.sub(string.format("%02d",math.floor(i)),1,2)
+            if i >= 0 then Txt(1,(centerY-2+(speed-i)),tostring(speedBarToDisplay)) end
+        end
+    end
+
+    --Draw the altitude wheel text
+    if altitudeWheel and showAltitude then
+        for i = math.floor((altitude-(height/32*20))/10)*10, math.floor((altitude+(height/32*20))/10)*10, 10 do
+            fadeValue = clamp(((math.abs(1/(i-altitude))*(height/64))^1.5*6000-20),0,255)
+            if not altitudeWheelFade then
+                fadeValue = 255
+            end
+            setColor("Altitude Wheel Text",fadeValue)
+
+            altBarToDisplay = string.sub(string.format("%02d",math.floor(i)),1,2)
+            if i >= 0 then Txt(width-(font*2)+vertspdhorizoffset,(centerY-2+(altitude-i)),tostring(i)) end
+        end
+    end
+
+    --Draw the compass wheel ticks and text
+    if showCompassWheel then
+        for i = -360, 720,10 do
+            diff = i-compass
+            fadeValue = clamp(150-(math.abs(diff)*4.5/(width/64)),0,150)
+            if not compassWheelFade then
+                fadeValue = 255
+            end
+            setColor("Compass Wheel",fadeValue)
+
+            vertPos = height-6-bottomPadding
+            if compassTop then
+                vertPos = topPadding
+            end
+
+            --Draws letters are North, East, South, and West
+            if i == 0 or i == 360 then
+                Txt(centerX+diff-(font-3),vertPos,"N")
+            elseif i == 90 then
+                Txt(centerX+diff-(font-3),vertPos,"E")
+            elseif i == 180 then
+                Txt(centerX+diff-(font-3),vertPos,"S")
+            elseif i == 270 then
+                Txt(centerX+diff-(font-3),vertPos,"W")
+            else
+                screen.drawLine(centerX+diff,vertPos+6,centerX+diff,vertPos)
+            end
+        end
+    end
+
+    --Speed Indicator
+    if showSpeed then
+        setColor("Text Background")
+        --if the speed units are off, then no need to draw two lines worth of background
+        if showSpeedUnits then
+            screen.drawRectF(0,centerY-6,1+(font*3),13)
+        else
+            screen.drawRectF(0,centerY-3,1+(font*3),7)
+        end
+
+        --The outline for the indicator
+        if outlineSpeed then
+            setColor("Speed Indicator Outline")
+            if showSpeedUnits then
+                screen.drawRect(-1,centerY-7,2+(font*3),14)
+            else
+                screen.drawRect(-1,centerY-4,2+(font*3),8)
+            end
+        end
+
+        --Draw the text.
+        setColor("Speed Text")
+        if showSpeedUnits then
+            Txt(1,centerY-5,tostring(math.floor(speed)))
+            Txt(1,centerY+1,spdUnits)
+        else
+            Txt(1,centerY-2,tostring(math.floor(speed)))
+        end
+    end
+
+    --Altitude indicator
+    if showAltitude then
+        setColor("Text Background")
+        --if the altitude units are off, then no need to draw two lines worht of background
+        if showAltUnits then
+            screen.drawRectF(width-(1+(font*4))+vertspdhorizoffset,centerY-6,(1+(font*4))-vertspdhorizoffset,13)
+        else
+            screen.drawRectF(width-(1+(font*4))+vertspdhorizoffset,centerY-3,(1+(font*4))-vertspdhorizoffset,7)
+        end
+
+        --outline the indicator
+        if outlineAlt then
+            setColor("Altitude Indicator Outline")
+            if showAltUnits then
+                screen.drawRect(width-(2+(font*4))+vertspdhorizoffset,centerY-7,(2+(font*4))-vertspdhorizoffset,14)
+            else
+                screen.drawRect(width-(2+(font*4))+vertspdhorizoffset,centerY-4,(2+(font*4))-vertspdhorizoffset,8)
+            end
+        end
+
+        --draw the text
+        altLength = tostring(math.floor(altitudeToDisplay)):len()
+        setColor("Altitude Text")
+        if showAltUnits then
+            Txt(width-(altLength*font)+vertspdhorizoffset,centerY-5,tostring(altitudeToDisplay))
+            Txt(width-(font*altUnits:len())+vertspdhorizoffset,centerY+1,tostring(altUnits))
+        else
+            Txt(width-(altLength*font)+vertspdhorizoffset,centerY-2,tostring(altitudeToDisplay))
+        end
+    end
+
+    --The compass reading
+    if showCompass then
+        setColor("Text Background")
+        --strange VScode versus in game issue, I have this here for testing
+        offset = 0
+
+        --Whether or not to draw the compass on the top or bottom of the screen
+        if compassTop then
+            screen.drawRectF(centerX-math.floor(((font*3)/2))-(font-4)+offset,topPadding,(font*3)+1,7)
+        else
+            screen.drawRectF(centerX-math.floor(((font*3)/2))-(font-4)+offset,height-7-bottomPadding,(font*3)+1,7)
+        end
+
+        --Outline...
+        if outlineCompass then
+            setColor("Compass Outline")
+            if compassTop then
+                screen.drawRect(centerX-math.floor(((font*3)/2))-(font-3)+offset,topPadding-1,(font*3)+2,8)
+            else
+                screen.drawRect(centerX-math.floor(((font*3)/2))-(font-3)+offset,height-8-bottomPadding,(font*3)+2,8)
+            end
+        end
+
+        --Text...
+        setColor("Compass Text")
+        compassLength = tostring(math.floor(compass+.5)):len()
+        if compassTop then
+            Txt(centerX-(compassLength*(font/2))+1,topPadding+1,tostring(math.floor(compass+0.5)))
+        else
+            Txt(centerX-(compassLength*(font/2))+1,height-6-bottomPadding,tostring(math.floor(compass+0.5)))
+        end
+    end
+
+    --The vertical speed indicator will be drawn on the right side of the screen
+    if verticalSpeedIndicator then
+        --draw a one pixel bar on the right side
+        setColor("Vertical Speed Background")
+        screen.drawRectF(width-1,0,1,height)
+
+        --Draw a line from center showing the vertical speed
+        if math.abs(verticalSpeed) > 1 then
+            setColor("Vertical Speed")
+
+            --dyanmic color is like a heat color indicator for how fast
+            if vspeedDynamicColor then
+                screen.setColor(clamp(math.abs(verticalSpeed)*2-30,0,150),150-clamp(math.abs(verticalSpeed)*2-30,0,150),0)
+            end
+
+            --The line...
+            screen.drawRectF(width-1,centerY,1,-verticalSpeed/3*(height/64))
+        end
+    end
+
+    --If you have padding on, then that area will be drawn over in black, you can remove this if you want to see into those areas.
+    screen.setColor(0,0,0)
+    screen.drawRectF(0,height-bottomPadding,width,bottomPadding)
+    screen.drawRectF(0,0,width,topPadding)
+
+end
+
+--Combination text function using Alyosha's 3x5 font (unreleased), and the default text function.
+function Txt(x,y,t)
+    x,y = math.floor(x),math.floor(y)
+    t=tostring(t)
+
+    --if font==4 means alyosha's, beacuse there are 4 pixels between the start of each character
+    if font == 4 then
+        for i=1,#t do
+            g=t:sub(i,i):upper():byte()-31
+            g=F[g>65 and g-26 or g]
+            for j=1,#g do
+                h=g[j]
+                screen.drawLine(x+h[1],y+h[2],x+h[3],y+h[4])
+            end
+            x=x+4
+        end
+    --if font==5 means the default since ,there are 5 pixels between the start of each character.
+    elseif font == 5 then
+        screen.drawText(x,y,t)
+    end
+end`,
 };
 function buildExampleList(){
   const sel=document.getElementById('exampleSel');
@@ -1261,13 +1975,13 @@ document.getElementById('tab-docs').innerHTML = `
   <div class="fn"><b>onDraw()</b> — runs each frame. The <i>only</i> place <code>screen.*</code> works. The screen is wiped to black before it runs.</div>
   <h3>screen — drawing</h3>
   <div class="fn"><b>screen.getWidth() / getHeight()</b> → monitor size in pixels.</div>
-  <div class="fn"><b>screen.setColor(r,g,b[,a])</b> — 0-255. Stays set until changed.</div>
+  <div class="fn"><b>screen.setColor(r,g,b[,a])</b> — 0-255. Stays set until changed. In game, colours render washed-out (gamma) — the "SW colours" toggle mirrors that.</div>
   <div class="fn"><b>screen.drawClear()</b> — fill the whole screen with the current colour.</div>
-  <div class="fn"><b>screen.drawText(x,y,text)</b> — x,y = top-left. ~4px per char, 5px tall.</div>
+  <div class="fn"><b>screen.drawText(x,y,text)</b> — x,y = top-left. 4×5 glyphs, 5px per char (space 4px), 6px line spacing. Pixel-exact in-game font.</div>
   <div class="fn"><b>screen.drawTextBox(x,y,w,h,text,hAlign,vAlign)</b> — wrapped + aligned (-1/0/1).</div>
-  <div class="fn"><b>screen.drawRect / drawRectF (x,y,w,h)</b> — outline / filled.</div>
-  <div class="fn"><b>screen.drawCircle / drawCircleF (x,y,r)</b> — outline / filled.</div>
-  <div class="fn"><b>screen.drawLine(x1,y1,x2,y2)</b></div>
+  <div class="fn"><b>screen.drawRect / drawRectF (x,y,w,h)</b> — outline / filled. Quirk: the outline actually spans <b>w+1 × h+1</b> pixels in-game (replicated here).</div>
+  <div class="fn"><b>screen.drawCircle / drawCircleF (x,y,r)</b> — outline / filled. In-game circles are really polygons: 8 sides (r&lt;20), 12 (r&lt;28), 16 (r≥28) — replicated here.</div>
+  <div class="fn"><b>screen.drawLine(x1,y1,x2,y2)</b> — quirk: the final pixel is <b>not</b> drawn in-game (replicated here). Add +0.25 to x2,y2 to include it — the drawing tool does this for you.</div>
   <div class="fn"><b>screen.drawTriangle / drawTriangleF (x1,y1,x2,y2,x3,y3)</b></div>
   <h3>input — signals coming in</h3>
   <div class="fn"><b>input.getNumber(channel)</b> → number on channel 1-32.</div>
@@ -1305,7 +2019,28 @@ document.getElementById('tab-notes').innerHTML = `
 `;
 
 /* ============================================================================
-   12. WIRE UP
+   12. AUTOSAVE — code + settings persist in the browser (localStorage)
+============================================================================ */
+const LS='swlua.';
+function lsGet(k){ try{ return localStorage.getItem(LS+k); }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(LS+k,v); }catch(e){} }
+function saveSettings(){
+  lsSet('size',document.getElementById('sizeSel').value);
+  lsSet('zoom',document.getElementById('zoomSel').value);
+  lsSet('color',document.getElementById('toolColor').value);
+  lsSet('grid',gridOn?'1':'0');
+  lsSet('gamma',gammaOn?'1':'0');
+}
+function restoreSettings(){
+  const size=lsGet('size'); if(size && [...document.getElementById('sizeSel').options].some(o=>o.value===size)) document.getElementById('sizeSel').value=size;
+  const zoom=lsGet('zoom'); if(zoom!==null && [...document.getElementById('zoomSel').options].some(o=>o.value===zoom)) document.getElementById('zoomSel').value=zoom;
+  const col=lsGet('color'); if(col && /^#[0-9a-fA-F]{6}$/.test(col)) document.getElementById('toolColor').value=col;
+  const grid=lsGet('grid'); if(grid!==null){ gridOn=(grid==='1'); document.getElementById('gridChk').checked=gridOn; }
+  const gam=lsGet('gamma'); if(gam!==null){ gammaOn=(gam==='1'); document.getElementById('gammaChk').checked=gammaOn; }
+}
+
+/* ============================================================================
+   13. WIRE UP
 ============================================================================ */
 function applySize(){
   const [w,h]=document.getElementById('sizeSel').value.split('x').map(Number);
@@ -1320,25 +2055,32 @@ window.addEventListener('load', ()=>{
   initEditor();
   buildExampleList();
   buildInputUI();
+  restoreSettings();
   applySize();
   if(window.lucide) lucide.createIcons();   // render the toolbar icons
 
-  // load the blank template by default
-  setCode(EXAMPLES["0 · Blank (onTick + onDraw)"]);
-  document.getElementById('exampleSel').value="0 · Blank (onTick + onDraw)";
+  // restore the last session's code, or load the blank template
+  const savedCode=lsGet('code');
+  if(savedCode!==null && savedCode.trim()!==''){
+    setCode(savedCode);
+    logLine('Restored your last drawing (autosaved in this browser).','info');
+  } else {
+    setCode(EXAMPLES["0 · Blank (onTick + onDraw)"]);
+    document.getElementById('exampleSel').value="0 · Blank (onTick + onDraw)";
+  }
   syncChannelsFromCode();
   setTool('move');
 
   // keep the Inputs panel mirrored to the code AND recompile live as you type (debounced)
   let syncTimer=null;
-  const onEdit=()=>{ clearTimeout(syncTimer); syncTimer=setTimeout(()=>{ syncChannelsFromCode(); liveReload(); }, 350); };
+  const onEdit=()=>{ clearTimeout(syncTimer); syncTimer=setTimeout(()=>{ syncChannelsFromCode(); liveReload(); lsSet('code', getCode()); }, 350); };
   if(cm) cm.on('change', onEdit); else document.getElementById('editor').addEventListener('input', onEdit);
 
   // controls
   document.getElementById('stepBtn').addEventListener('click', step);
   document.getElementById('resetBtn').addEventListener('click', reset);
-  document.getElementById('sizeSel').addEventListener('change', applySize);
-  document.getElementById('zoomSel').addEventListener('change', ()=>{ renderCanvas(); });
+  document.getElementById('sizeSel').addEventListener('change', ()=>{ applySize(); saveSettings(); });
+  document.getElementById('zoomSel').addEventListener('change', ()=>{ renderCanvas(); saveSettings(); });
   document.getElementById('exampleSel').addEventListener('change', e=>{ const n=e.target.value; if(EXAMPLES[n]){ stopLoop(); setCode(EXAMPLES[n]); syncChannelsFromCode(); reset(); logLine('Loaded "'+n+'".','info'); } });
 
   // dynamic add-input buttons
@@ -1352,10 +2094,11 @@ window.addEventListener('load', ()=>{
   // tool palette
   document.querySelectorAll('#screenToolbar [data-tool]').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
   document.getElementById('fillToggle').addEventListener('click', ()=>setFill(!fillShape));
-  document.getElementById('toolColor').addEventListener('change', commitColor);   // picking a colour writes it to code now
+  document.getElementById('toolColor').addEventListener('change', ()=>{ commitColor(); saveSettings(); });   // picking a colour writes it to code now
   document.getElementById('undoBtn').addEventListener('click', doUndo);
   document.getElementById('redoBtn').addEventListener('click', doRedo);
-  document.getElementById('gridChk').addEventListener('change', e=>{ gridOn=e.target.checked; renderCanvas(); });
+  document.getElementById('gridChk').addEventListener('change', e=>{ gridOn=e.target.checked; renderCanvas(); saveSettings(); });
+  document.getElementById('gammaChk').addEventListener('change', e=>{ gammaOn=e.target.checked; renderCanvas(); saveSettings(); });
   const sc=document.getElementById('screen');
   sc.addEventListener('mousedown', e=>{ e.preventDefault(); toolDown(e); });
   window.addEventListener('mousemove', e=>{ if(dragStart||moveTarget) toolMove(e); });
